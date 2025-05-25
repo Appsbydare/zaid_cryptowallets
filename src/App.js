@@ -12,58 +12,40 @@ const CryptoTrackerProduction = () => {
   const [selectedDateRange, setSelectedDateRange] = useState('7d');
   const [showBalances, setShowBalances] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
 
-  // This will be replaced with actual Google Sheets API calls
+  // Fetch data from Google Sheets via API
   const fetchDataFromSheets = async () => {
     setRefreshing(true);
-    // Simulate API call - replace with actual Google Sheets API
-    setTimeout(() => {
-      const productionTransactions = [
-        // Binance Account 1 (GC)
-        { id: 1, platform: "Binance (GC)", type: "deposit", asset: "USDT", amount: "2500.00", timestamp: "2025-05-23 09:15:00", from_address: "P2P Trade", to_address: "Binance Spot", tx_id: "BN_P2P_001", status: "Completed", network: "TRC20", client: "Al Mahmoud Trading", amount_aed: "9175.00", rate: "3.67", remarks: "" },
-        { id: 2, platform: "Binance (GC)", type: "withdrawal", asset: "BTC", amount: "0.05", timestamp: "2025-05-23 14:30:00", from_address: "Binance Spot", to_address: "bc1qkuefzcmc6c8enw9f7a2e9w2hy964q3jgwcv35g", tx_id: "0xa1b2c3d4e5f6789012345678901234567890abcdef", status: "Completed", network: "BTC", client: "Investment Fund", amount_aed: "11010.00", rate: "220200.00", remarks: "Monthly allocation" },
-        
-        // Binance Account 2 (Main)
-        { id: 3, platform: "Binance (Main)", type: "deposit", asset: "ETH", amount: "1.25", timestamp: "2025-05-23 11:45:00", from_address: "0x856851a1d5111330729744f95238e5D810ba773c", to_address: "Binance Spot", tx_id: "0xeth123456789abcdef", status: "Completed", network: "ETH", client: "DeFi Returns", amount_aed: "13762.50", rate: "11010.00", remarks: "Staking rewards" },
-        { id: 4, platform: "Binance (Main)", type: "withdrawal", asset: "USDT", amount: "5000.00", timestamp: "2025-05-23 16:20:00", from_address: "Binance Spot", to_address: "TAUDuQAZSTUH88xno1imPoKN25eJN6aJkN", tx_id: "BN_INTERNAL_002", status: "Completed", network: "TRC20", client: "Trading Capital", amount_aed: "18350.00", rate: "3.67", remarks: "Trading fund transfer" },
-        
-        // ByBit Account
-        { id: 5, platform: "ByBit (CV)", type: "deposit", asset: "SOL", amount: "150.00", timestamp: "2025-05-23 08:30:00", from_address: "BURkHx6BNTqryY3sCqXcYNVkhN6Mz3ttDUdGQ6hXuX4n", to_address: "ByBit Spot", tx_id: "BB_SOL_001", status: "Completed", network: "SOL", client: "Solana Investment", amount_aed: "27225.00", rate: "181.50", remarks: "Portfolio diversification" },
-        { id: 6, platform: "ByBit (CV)", type: "withdrawal", asset: "USDT", amount: "1200.00", timestamp: "2025-05-23 13:10:00", from_address: "ByBit Spot", to_address: "TAUDuQAZSTUH88xno1imPoKN25eJN6aJkN", tx_id: "BB_USDT_001", status: "Completed", network: "TRC20", client: "Profit Taking", amount_aed: "4404.00", rate: "3.67", remarks: "Profit withdrawal" },
-
-        // Blockchain Wallets - TRC20
-        { id: 7, platform: "TRON Wallet", type: "deposit", asset: "USDT", amount: "3000.00", timestamp: "2025-05-23 10:25:00", from_address: "TYkVL9GbRQ9498gHVpQwGzg9mTvJ8uCdcV", to_address: "TAUDuQAZSTUH88xno1imPoKN25eJN6aJkN", tx_id: "tron_tx_001", status: "Completed", network: "TRC20", client: "External Partner", amount_aed: "11010.00", rate: "3.67", remarks: "Partnership payment" },
-        
-        // Blockchain Wallets - ERC20
-        { id: 8, platform: "Ethereum Wallet", type: "withdrawal", asset: "ETH", amount: "0.75", timestamp: "2025-05-23 15:45:00", from_address: "0x856851a1d5111330729744f95238e5D810ba773c", to_address: "0x7c7379531b2aee82e4ca06d4175d13b9cbeafd49", tx_id: "eth_tx_002", status: "Completed", network: "ETH", client: "DeFi Protocol", amount_aed: "8257.50", rate: "11010.00", remarks: "Liquidity provision" },
-        
-        // Bitcoin Wallet
-        { id: 9, platform: "Bitcoin Wallet", type: "deposit", asset: "BTC", amount: "0.15", timestamp: "2025-05-23 12:00:00", from_address: "bc1q9h9zr8acnkldpk7rjz28h0wvs0dg6wdcqz5xla", to_address: "bc1qkuefzcmc6c8enw9f7a2e9w2hy964q3jgwcv35g", tx_id: "btc_tx_001", status: "Completed", network: "BTC", client: "Bitcoin Purchase", amount_aed: "33030.00", rate: "220200.00", remarks: "DCA strategy" },
-        
-        // Solana Wallet
-        { id: 10, platform: "Solana Wallet", type: "withdrawal", asset: "SOL", amount: "25.00", timestamp: "2025-05-23 17:30:00", from_address: "BURkHx6BNTqryY3sCqXcYNVkhN6Mz3ttDUdGQ6hXuX4n", to_address: "So1ana2Address3Here", tx_id: "sol_tx_001", status: "Completed", network: "SOL", client: "NFT Purchase", amount_aed: "4537.50", rate: "181.50", remarks: "NFT marketplace" }
-      ];
+    setError(null);
+    
+    try {
+      const response = await fetch('/api/sheets');
       
-      setTransactionData(productionTransactions);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       
-      // Calculate wallet balances (this would come from real APIs)
-      const balances = {
-        "Binance (GC)": { BTC: 0.25, ETH: 2.1, USDT: 15000, SOL: 0 },
-        "Binance (Main)": { BTC: 0.1, ETH: 5.5, USDT: 25000, SOL: 45 },
-        "Binance (CV)": { BTC: 0.05, ETH: 1.2, USDT: 8000, SOL: 20 },
-        "ByBit (CV)": { BTC: 0, ETH: 0.8, USDT: 12000, SOL: 125 },
-        "Bitcoin Wallet": { BTC: 0.45 },
-        "Ethereum Wallet": { ETH: 3.25, USDT: 5000 },
-        "TRON Wallet": { USDT: 18000, TRX: 50000 },
-        "Solana Wallet": { SOL: 275 },
-        "BEP20 Wallet": { BNB: 15, USDT: 3000 }
-      };
+      const data = await response.json();
       
-      setWalletBalances(balances);
-      setLastUpdated(new Date().toLocaleString());
+      // Set the data from Google Sheets
+      setTransactionData(data.transactions || []);
+      setWalletBalances(data.walletBalances || {});
+      setLastUpdated(new Date(data.lastUpdated).toLocaleString());
       setIsLoading(false);
       setRefreshing(false);
-    }, 1500);
+      
+    } catch (error) {
+      console.error('Error fetching data from Google Sheets:', error);
+      setError(error.message);
+      setIsLoading(false);
+      setRefreshing(false);
+      
+      // Set empty data on error
+      setTransactionData([]);
+      setWalletBalances({});
+      setLastUpdated('Failed to load');
+    }
   };
 
   useEffect(() => {
@@ -93,7 +75,7 @@ const CryptoTrackerProduction = () => {
 
   // Calculate total portfolio value
   const getPortfolioValue = () => {
-    // Current prices in AED (these would come from real price APIs)
+    // Current prices in AED (these would come from real price APIs in future)
     const prices = {
       BTC: 220200,
       ETH: 11010,
@@ -190,12 +172,30 @@ const CryptoTrackerProduction = () => {
     ? transactionData 
     : transactionData.filter(tx => tx.platform === selectedPlatform);
 
+  // Loading state
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
         <div className="text-2xl font-bold text-gray-700 mb-4">Loading Your Crypto Portfolio...</div>
         <div className="w-16 h-16 border-4 border-t-blue-500 border-blue-200 rounded-full animate-spin"></div>
-        <p className="text-gray-500 mt-4">Fetching real-time data from all wallets...</p>
+        <p className="text-gray-500 mt-4">Fetching real-time data from Google Sheets...</p>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error && transactionData.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
+        <div className="text-2xl font-bold text-red-600 mb-4">Connection Error</div>
+        <div className="text-gray-600 mb-4">Unable to fetch data from Google Sheets</div>
+        <div className="text-sm text-gray-500 mb-6">Error: {error}</div>
+        <button 
+          onClick={fetchDataFromSheets}
+          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+        >
+          Retry Connection
+        </button>
       </div>
     );
   }
@@ -258,8 +258,8 @@ const CryptoTrackerProduction = () => {
         {/* Status Bar */}
         <div className="bg-white p-4 rounded-lg shadow mb-6 flex justify-between items-center">
           <div className="flex items-center">
-            <Circle size={12} className="text-green-500 mr-2" fill="currentColor" />
-            <span>All systems operational • Real-time sync active</span>
+            <Circle size={12} className={error ? "text-red-500" : "text-green-500"} fill="currentColor" />
+            <span>{error ? 'Connection issues detected' : 'Connected to Google Sheets • Real-time sync active'}</span>
           </div>
           <div className="flex items-center text-gray-500 text-sm">
             <span>Last updated: {lastUpdated}</span>
@@ -328,41 +328,53 @@ const CryptoTrackerProduction = () => {
               <div className="bg-white p-6 rounded-lg shadow-md">
                 <h3 className="text-lg font-medium text-gray-700 mb-4">Platform Activity (AED)</h3>
                 <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={preparePlatformChart()}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip formatter={(value) => [`AED ${value.toFixed(2)}`, 'Value']} />
-                      <Legend />
-                      <Bar dataKey="deposits" name="Deposits" fill="#10B981" />
-                      <Bar dataKey="withdrawals" name="Withdrawals" fill="#EF4444" />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {preparePlatformChart().length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={preparePlatformChart()}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip formatter={(value) => [`AED ${value.toFixed(2)}`, 'Value']} />
+                        <Legend />
+                        <Bar dataKey="deposits" name="Deposits" fill="#10B981" />
+                        <Bar dataKey="withdrawals" name="Withdrawals" fill="#EF4444" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-gray-500">
+                      No transaction data available
+                    </div>
+                  )}
                 </div>
               </div>
               
               <div className="bg-white p-6 rounded-lg shadow-md">
                 <h3 className="text-lg font-medium text-gray-700 mb-4">Asset Distribution</h3>
                 <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={prepareAssetDistribution()}
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                        label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      >
-                        {prepareAssetDistribution().map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value) => [`AED ${value.toFixed(2)}`, 'Value']} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  {prepareAssetDistribution().length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={prepareAssetDistribution()}
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={80}
+                          fill="#8884d8"
+                          dataKey="value"
+                          label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        >
+                          {prepareAssetDistribution().map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value) => [`AED ${value.toFixed(2)}`, 'Value']} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-gray-500">
+                      No wallet balance data available
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -371,48 +383,54 @@ const CryptoTrackerProduction = () => {
             <div className="bg-white p-6 rounded-lg shadow-md mb-6">
               <h3 className="text-lg font-medium text-gray-700 mb-4">Daily Transaction Volume</h3>
               <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={prepareDailyVolumeChart()}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis 
-                      dataKey="name" 
-                      tickFormatter={(value) => {
-                        const date = new Date(value);
-                        return `${date.getMonth() + 1}-${date.getDate()}`;
-                      }}
-                    />
-                    <YAxis 
-                      tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
-                    />
-                    <Tooltip 
-                      formatter={(value) => [`AED ${value.toLocaleString()}`, '']}
-                      labelFormatter={(label) => `Date: ${label}`}
-                    />
-                    <Legend />
-                    <Line 
-                      type="monotone" 
-                      dataKey="deposits" 
-                      stroke="#10B981" 
-                      strokeWidth={3}
-                      fill="#10B981"
-                      fillOpacity={0.1}
-                      name="Deposits"
-                      dot={{ fill: '#10B981', strokeWidth: 2, r: 6 }}
-                      activeDot={{ r: 8, stroke: '#10B981', strokeWidth: 2 }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="withdrawals" 
-                      stroke="#EF4444" 
-                      strokeWidth={3}
-                      fill="#EF4444"
-                      fillOpacity={0.1}
-                      name="Withdrawals"
-                      dot={{ fill: '#EF4444', strokeWidth: 2, r: 6 }}
-                      activeDot={{ r: 8, stroke: '#EF4444', strokeWidth: 2 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                {prepareDailyVolumeChart().length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={prepareDailyVolumeChart()}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="name" 
+                        tickFormatter={(value) => {
+                          const date = new Date(value);
+                          return `${date.getMonth() + 1}-${date.getDate()}`;
+                        }}
+                      />
+                      <YAxis 
+                        tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
+                      />
+                      <Tooltip 
+                        formatter={(value) => [`AED ${value.toLocaleString()}`, '']}
+                        labelFormatter={(label) => `Date: ${label}`}
+                      />
+                      <Legend />
+                      <Line 
+                        type="monotone" 
+                        dataKey="deposits" 
+                        stroke="#10B981" 
+                        strokeWidth={3}
+                        fill="#10B981"
+                        fillOpacity={0.1}
+                        name="Deposits"
+                        dot={{ fill: '#10B981', strokeWidth: 2, r: 6 }}
+                        activeDot={{ r: 8, stroke: '#10B981', strokeWidth: 2 }}
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="withdrawals" 
+                        stroke="#EF4444" 
+                        strokeWidth={3}
+                        fill="#EF4444"
+                        fillOpacity={0.1}
+                        name="Withdrawals"
+                        dot={{ fill: '#EF4444', strokeWidth: 2, r: 6 }}
+                        activeDot={{ r: 8, stroke: '#EF4444', strokeWidth: 2 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-gray-500">
+                    No daily transaction data available
+                  </div>
+                )}
               </div>
             </div>
           </>
@@ -445,42 +463,48 @@ const CryptoTrackerProduction = () => {
             </div>
             
             <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead>
-                  <tr className="bg-gray-50">
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date & Time</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Platform</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asset</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">AED Value</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {filteredTransactions.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{tx.timestamp}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{tx.platform}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          tx.type === 'deposit' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
-                          {tx.type}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{tx.asset}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{parseFloat(tx.amount).toFixed(8)}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {showBalances ? `AED ${parseFloat(tx.amount_aed).toLocaleString()}` : '••••••'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{tx.client}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{tx.remarks}</td>
+              {filteredTransactions.length > 0 ? (
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date & Time</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Platform</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asset</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">AED Value</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {filteredTransactions.map((tx) => (
+                      <tr key={tx.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{tx.timestamp}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{tx.platform}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            tx.type === 'deposit' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                          }`}>
+                            {tx.type}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{tx.asset}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{parseFloat(tx.amount).toFixed(8)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {showBalances ? `AED ${parseFloat(tx.amount_aed).toLocaleString()}` : '••••••'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{tx.client}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{tx.remarks}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="text-center py-12">
+                  <p className="text-gray-500">No transactions found. Add some sample data to your Google Sheet to see them here.</p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -490,23 +514,29 @@ const CryptoTrackerProduction = () => {
             <div className="bg-white p-6 rounded-lg shadow-md">
               <h3 className="text-xl font-medium text-gray-700 mb-4">Wallet Balances</h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {Object.entries(walletBalances).map(([wallet, assets]) => (
-                  <div key={wallet} className="border rounded-lg p-4">
-                    <h4 className="font-medium text-gray-900 mb-3">{wallet}</h4>
-                    <div className="space-y-2">
-                      {Object.entries(assets).map(([asset, amount]) => (
-                        <div key={asset} className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">{asset}</span>
-                          <span className="text-sm font-medium">
-                            {showBalances ? amount.toFixed(8) : '••••••'}
-                          </span>
-                        </div>
-                      ))}
+              {Object.keys(walletBalances).length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {Object.entries(walletBalances).map(([wallet, assets]) => (
+                    <div key={wallet} className="border rounded-lg p-4">
+                      <h4 className="font-medium text-gray-900 mb-3">{wallet}</h4>
+                      <div className="space-y-2">
+                        {Object.entries(assets).map(([asset, amount]) => (
+                          <div key={asset} className="flex justify-between items-center">
+                            <span className="text-sm text-gray-600">{asset}</span>
+                            <span className="text-sm font-medium">
+                              {showBalances ? amount.toFixed(8) : '••••••'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <p className="text-gray-500">No wallet balance data available. This will be populated when API integrations are complete.</p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -523,9 +553,9 @@ const CryptoTrackerProduction = () => {
                     <div key={account} className="flex justify-between items-center p-3 border rounded">
                       <div>
                         <span className="font-medium">{account}</span>
-                        <p className="text-sm text-gray-500">API Connected • Auto-sync enabled</p>
+                        <p className="text-sm text-gray-500">API Setup Required</p>
                       </div>
-                      <Circle size={12} className="text-green-500" fill="currentColor" />
+                      <Circle size={12} className="text-yellow-500" fill="currentColor" />
                     </div>
                   ))}
                 </div>
@@ -545,7 +575,7 @@ const CryptoTrackerProduction = () => {
                         <span className="font-medium">{wallet.name}</span>
                         <p className="text-sm text-gray-500">{wallet.address}</p>
                       </div>
-                      <Circle size={12} className="text-green-500" fill="currentColor" />
+                      <Circle size={12} className="text-yellow-500" fill="currentColor" />
                     </div>
                   ))}
                 </div>
