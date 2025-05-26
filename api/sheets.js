@@ -10,12 +10,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Sample data for testing
-    const sampleData = {
+    // Simple test data - no Google Sheets integration yet
+    const testData = {
       transactions: [
         {
           id: 1,
-          timestamp: "2025-05-23 14:30:00",
+          timestamp: "2025-05-26 14:30:00",
           platform: "Binance (GC)",
           type: "deposit",
           asset: "USDT",
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
         },
         {
           id: 2,
-          timestamp: "2025-05-23 16:20:00",
+          timestamp: "2025-05-26 16:20:00",
           platform: "Binance (Main)",
           type: "withdrawal",
           asset: "USDT",
@@ -46,6 +46,23 @@ export default async function handler(req, res) {
           tx_id: "BN_INTERNAL_002",
           status: "Completed",
           network: "TRC20"
+        },
+        {
+          id: 3,
+          timestamp: "2025-05-25 11:15:00",
+          platform: "ByBit (CV)",
+          type: "deposit",
+          asset: "SOL",
+          amount: "150.00",
+          amount_aed: "27225.00",
+          rate: "181.50",
+          client: "Solana Investment",
+          remarks: "Portfolio Diversification",
+          from_address: "External Wallet",
+          to_address: "ByBit Spot",
+          tx_id: "BB_SOL_001",
+          status: "Completed",
+          network: "SOL"
         }
       ],
       walletBalances: {
@@ -54,16 +71,19 @@ export default async function handler(req, res) {
         "Binance (CV)": { BTC: 0.05, ETH: 1.2, USDT: 8000, SOL: 20 },
         "ByBit (CV)": { BTC: 0, ETH: 0.8, USDT: 12000, SOL: 125 }
       },
-      lastUpdated: new Date().toISOString()
+      lastUpdated: new Date().toISOString(),
+      status: "API Connection Working ✅"
     };
 
-    res.status(200).json(sampleData);
+    console.log('API called successfully');
+    res.status(200).json(testData);
 
   } catch (error) {
-    console.error('Error in API route:', error);
+    console.error('API Error:', error);
     res.status(500).json({ 
-      error: 'Internal server error',
-      message: error.message 
+      error: 'API Error',
+      message: error.message,
+      timestamp: new Date().toISOString()
     });
   }
 }
