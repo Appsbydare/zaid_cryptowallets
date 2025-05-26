@@ -1,5 +1,5 @@
 // File: api/fetch-exchange-data.js
-// Deploy this to Vercel with Canadian region
+// DEBUG VERSION - Replace your current file with this
 
 import crypto from 'crypto';
 
@@ -15,6 +15,24 @@ export default async function handler(req, res) {
   }
 
   try {
+    const debugInfo = {
+      environmentCheck: {},
+      apiResults: {},
+      errors: []
+    };
+
+    // Check environment variables
+    debugInfo.environmentCheck = {
+      BINANCE_GC_API_KEY: !!process.env.BINANCE_GC_API_KEY,
+      BINANCE_GC_API_SECRET: !!process.env.BINANCE_GC_API_SECRET,
+      BINANCE_MAIN_API_KEY: !!process.env.BINANCE_MAIN_API_KEY,
+      BINANCE_MAIN_API_SECRET: !!process.env.BINANCE_MAIN_API_SECRET,
+      BINANCE_CV_API_KEY: !!process.env.BINANCE_CV_API_KEY,
+      BINANCE_CV_API_SECRET: !!process.env.BINANCE_CV_API_SECRET,
+      BYBIT_API_KEY: !!process.env.BYBIT_API_KEY,
+      BYBIT_API_SECRET: !!process.env.BYBIT_API_SECRET
+    };
+
     const allTransactions = [];
 
     // Binance Accounts Configuration
@@ -42,30 +60,47 @@ export default async function handler(req, res) {
       apiSecret: process.env.BYBIT_API_SECRET
     };
 
-    // Fetch from all Binance accounts
+    // Test each Binance account
     for (const account of BINANCE_ACCOUNTS) {
       if (!account.apiKey || !account.apiSecret) {
-        console.log(`Skipping ${account.name} - missing credentials`);
+        debugInfo.errors.push(`${account.name}: Missing API credentials`);
+        debugInfo.apiResults[account.name] = "SKIPPED - No credentials";
         continue;
       }
 
-      console.log(`Fetching ${account.name}...`);
-      const transactions = await fetchBinanceTransactions(account);
-      allTransactions.push(...transactions);
+      console.log(`Testing ${account.name}...`);
+      const result = await testBinanceAccount(account);
+      debugInfo.apiResults[account.name] = result;
+      
+      if (result.success) {
+        allTransactions.push(...result.transactions);
+      } else {
+        debugInfo.errors.push(`${account.name}: ${result.error}`);
+      }
     }
 
-    // Fetch from ByBit
-    if (BYBIT_CONFIG.apiKey && BYBIT_CONFIG.apiSecret) {
-      console.log("Fetching ByBit...");
-      const bybitTransactions = await fetchByBitTransactions(BYBIT_CONFIG);
-      allTransactions.push(...bybitTransactions);
+    // Test ByBit
+    if (!BYBIT_CONFIG.apiKey || !BYBIT_CONFIG.apiSecret) {
+      debugInfo.errors.push("ByBit: Missing API credentials");
+      debugInfo.apiResults["ByBit"] = "SKIPPED - No credentials";
+    } else {
+      console.log("Testing ByBit...");
+      const result = await testByBitAccount(BYBIT_CONFIG);
+      debugInfo.apiResults["ByBit"] = result;
+      
+      if (result.success) {
+        allTransactions.push(...result.transactions);
+      } else {
+        debugInfo.errors.push(`ByBit: ${result.error}`);
+      }
     }
 
     res.status(200).json({
       success: true,
       transactions: allTransactions,
       count: allTransactions.length,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      debug: debugInfo
     });
 
   } catch (error) {
@@ -80,39 +115,14 @@ export default async function handler(req, res) {
 }
 
 /**
- * Fetch all Binance transactions for an account
+ * Test Binance account with simple account info call
  */
-async function fetchBinanceTransactions(account) {
+async function testBinanceAccount(account) {
   try {
-    const transactions = [];
-    const now = Date.now();
-
-    // Get deposits
-    const deposits = await fetchBinanceDeposits(account, now);
-    transactions.push(...deposits);
-
-    // Get withdrawals
-    const withdrawals = await fetchBinanceWithdrawals(account, now);
-    transactions.push(...withdrawals);
-
-    // Get P2P transactions
-    const p2pTransactions = await fetchBinanceP2P(account, now);
-    transactions.push(...p2pTransactions);
-
-    return transactions;
-
-  } catch (error) {
-    console.error(`Error fetching ${account.name}:`, error);
-    return [];
-  }
-}
-
-/**
- * Fetch Binance deposits
- */
-async function fetchBinanceDeposits(account, timestamp) {
-  try {
-    const endpoint = "https://api.binance.com/sapi/v1/capital/deposit/hisrec";
+    const timestamp = Date.now();
+    
+    // Simple account info call to test credentials
+    const endpoint = "https://api.binance.com/api/v3/account";
     const params = {
       timestamp: timestamp,
       recvWindow: 5000
@@ -129,15 +139,142 @@ async function fetchBinanceDeposits(account, timestamp) {
       }
     });
 
+    const responseText = await response.text();
+    
     if (!response.ok) {
-      throw new Error(`Binance deposits API error: ${response.status} ${response.statusText}`);
+      return {
+        success: false,
+        error: `HTTP ${response.status}: ${responseText.substring(0, 200)}`,
+        transactions: []
+      };
+    }
+
+    const data = JSON.parse(responseText);
+    
+    if (data.code && data.code !== 200) {
+      return {
+        success: false,
+        error: `Binance error: ${data.msg}`,
+        transactions: []
+      };
+    }
+
+    // If we get here, credentials work - now try to get recent deposits
+    const deposits = await fetchBinanceDeposits(account, timestamp);
+    
+    return {
+      success: true,
+      error: null,
+      transactions: deposits,
+      accountInfo: `Account has ${data.balances?.length || 0} balances`
+    };
+
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+      transactions: []
+    };
+  }
+}
+
+/**
+ * Test ByBit account
+ */
+async function testByBitAccount(config) {
+  try {
+    const timestamp = Date.now();
+    
+    // Simple account info call
+    const endpoint = "https://api.bybit.com/v5/account/wallet-balance";
+    const params = {
+      accountType: "UNIFIED",
+      timestamp: timestamp.toString()
+    };
+
+    const signature = createByBitSignature(params, config.apiSecret);
+    const queryString = createQueryString(params);
+    const url = `${endpoint}?${queryString}`;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "X-BAPI-API-KEY": config.apiKey,
+        "X-BAPI-SIGN": signature,
+        "X-BAPI-TIMESTAMP": timestamp.toString()
+      }
+    });
+
+    const responseText = await response.text();
+    
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `HTTP ${response.status}: ${responseText.substring(0, 200)}`,
+        transactions: []
+      };
+    }
+
+    const data = JSON.parse(responseText);
+    
+    if (data.retCode !== 0) {
+      return {
+        success: false,
+        error: `ByBit error: ${data.retMsg}`,
+        transactions: []
+      };
+    }
+
+    // If credentials work, try to get deposits
+    const deposits = await fetchByBitDeposits(config, timestamp);
+    
+    return {
+      success: true,
+      error: null,
+      transactions: deposits,
+      accountInfo: "Account accessible"
+    };
+
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+      transactions: []
+    };
+  }
+}
+
+/**
+ * Fetch Binance deposits (simplified for testing)
+ */
+async function fetchBinanceDeposits(account, timestamp) {
+  try {
+    const endpoint = "https://api.binance.com/sapi/v1/capital/deposit/hisrec";
+    const params = {
+      timestamp: timestamp,
+      recvWindow: 5000,
+      limit: 10 // Limit for testing
+    };
+
+    const signature = createBinanceSignature(params, account.apiSecret);
+    const queryString = createQueryString(params);
+    const url = `${endpoint}?${queryString}&signature=${signature}`;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "X-MBX-APIKEY": account.apiKey
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Deposits API error: ${response.status}`);
     }
 
     const data = await response.json();
 
     if (data.code && data.code !== 200) {
-      console.error(`Binance deposits error for ${account.name}:`, data.msg);
-      return [];
+      throw new Error(`Binance deposits error: ${data.msg}`);
     }
 
     return data.map(deposit => ({
@@ -161,143 +298,13 @@ async function fetchBinanceDeposits(account, timestamp) {
 }
 
 /**
- * Fetch Binance withdrawals
- */
-async function fetchBinanceWithdrawals(account, timestamp) {
-  try {
-    const endpoint = "https://api.binance.com/sapi/v1/capital/withdraw/history";
-    const params = {
-      timestamp: timestamp,
-      recvWindow: 5000
-    };
-
-    const signature = createBinanceSignature(params, account.apiSecret);
-    const queryString = createQueryString(params);
-    const url = `${endpoint}?${queryString}&signature=${signature}`;
-
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "X-MBX-APIKEY": account.apiKey
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Binance withdrawals API error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-
-    if (data.code && data.code !== 200) {
-      console.error(`Binance withdrawals error for ${account.name}:`, data.msg);
-      return [];
-    }
-
-    return data.map(withdrawal => ({
-      platform: account.name,
-      type: "withdrawal",
-      asset: withdrawal.coin,
-      amount: withdrawal.amount.toString(),
-      timestamp: new Date(withdrawal.applyTime).toISOString(),
-      from_address: account.name,
-      to_address: withdrawal.address,
-      tx_id: withdrawal.txId || withdrawal.id,
-      status: withdrawal.status === 6 ? "Completed" : "Pending",
-      network: withdrawal.network,
-      api_source: "Binance_Withdrawal"
-    }));
-
-  } catch (error) {
-    console.error(`Error fetching withdrawals for ${account.name}:`, error);
-    return [];
-  }
-}
-
-/**
- * Fetch Binance P2P transactions
- */
-async function fetchBinanceP2P(account, timestamp) {
-  try {
-    const endpoint = "https://api.binance.com/sapi/v1/c2c/orderMatch/listUserOrderHistory";
-    const params = {
-      timestamp: timestamp,
-      recvWindow: 5000
-    };
-
-    const signature = createBinanceSignature(params, account.apiSecret);
-    const queryString = createQueryString(params);
-    const url = `${endpoint}?${queryString}&signature=${signature}`;
-
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "X-MBX-APIKEY": account.apiKey
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Binance P2P API error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-
-    if (data.code && data.code !== 200) {
-      console.error(`Binance P2P error for ${account.name}:`, data.msg);
-      return [];
-    }
-
-    return data.data.map(p2p => ({
-      platform: account.name,
-      type: p2p.tradeType.toLowerCase() === 'buy' ? 'deposit' : 'withdrawal',
-      asset: p2p.asset,
-      amount: p2p.totalPrice.toString(),
-      timestamp: new Date(p2p.createTime).toISOString(),
-      from_address: "P2P Trade",
-      to_address: account.name,
-      tx_id: p2p.orderNumber,
-      status: p2p.orderStatus === "COMPLETED" ? "Completed" : "Pending",
-      network: "P2P",
-      api_source: "Binance_P2P"
-    }));
-
-  } catch (error) {
-    console.error(`Error fetching P2P for ${account.name}:`, error);
-    return [];
-  }
-}
-
-/**
- * Fetch ByBit transactions
- */
-async function fetchByBitTransactions(config) {
-  try {
-    const transactions = [];
-    const timestamp = Date.now();
-
-    // Get deposits
-    const deposits = await fetchByBitDeposits(config, timestamp);
-    transactions.push(...deposits);
-
-    // Get withdrawals
-    const withdrawals = await fetchByBitWithdrawals(config, timestamp);
-    transactions.push(...withdrawals);
-
-    return transactions;
-
-  } catch (error) {
-    console.error("Error fetching ByBit:", error);
-    return [];
-  }
-}
-
-/**
- * Fetch ByBit deposits
+ * Fetch ByBit deposits (simplified for testing)
  */
 async function fetchByBitDeposits(config, timestamp) {
   try {
     const endpoint = "https://api.bybit.com/v5/asset/deposit/query-record";
     const params = {
-      api_key: config.apiKey,
+      limit: 10, // Limit for testing
       timestamp: timestamp.toString()
     };
 
@@ -315,14 +322,13 @@ async function fetchByBitDeposits(config, timestamp) {
     });
 
     if (!response.ok) {
-      throw new Error(`ByBit deposits API error: ${response.status} ${response.statusText}`);
+      throw new Error(`Deposits API error: ${response.status}`);
     }
 
     const data = await response.json();
 
     if (data.retCode !== 0) {
-      console.error("ByBit deposits error:", data.retMsg);
-      return [];
+      throw new Error(`ByBit deposits error: ${data.retMsg}`);
     }
 
     return data.result.rows.map(deposit => ({
@@ -341,61 +347,6 @@ async function fetchByBitDeposits(config, timestamp) {
 
   } catch (error) {
     console.error("Error fetching ByBit deposits:", error);
-    return [];
-  }
-}
-
-/**
- * Fetch ByBit withdrawals
- */
-async function fetchByBitWithdrawals(config, timestamp) {
-  try {
-    const endpoint = "https://api.bybit.com/v5/asset/withdraw/query-record";
-    const params = {
-      api_key: config.apiKey,
-      timestamp: timestamp.toString()
-    };
-
-    const signature = createByBitSignature(params, config.apiSecret);
-    const queryString = createQueryString(params);
-    const url = `${endpoint}?${queryString}`;
-
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "X-BAPI-API-KEY": config.apiKey,
-        "X-BAPI-SIGN": signature,
-        "X-BAPI-TIMESTAMP": timestamp.toString()
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`ByBit withdrawals API error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-
-    if (data.retCode !== 0) {
-      console.error("ByBit withdrawals error:", data.retMsg);
-      return [];
-    }
-
-    return data.result.rows.map(withdrawal => ({
-      platform: config.name,
-      type: "withdrawal",
-      asset: withdrawal.coin,
-      amount: withdrawal.amount.toString(),
-      timestamp: new Date(parseInt(withdrawal.createTime)).toISOString(),
-      from_address: config.name,
-      to_address: withdrawal.toAddress,
-      tx_id: withdrawal.txID,
-      status: withdrawal.status === "success" ? "Completed" : "Pending",
-      network: withdrawal.chain,
-      api_source: "ByBit_Withdrawal"
-    }));
-
-  } catch (error) {
-    console.error("Error fetching ByBit withdrawals:", error);
     return [];
   }
 }
