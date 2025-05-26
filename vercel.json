@@ -1,9 +1,3 @@
-
 {
-  "functions": {
-    "api/fetch-exchange-data.js": {
-      "regions": ["yyz1"]
-    }
-  },
   "regions": ["yyz1"]
 }
