@@ -1,5 +1,3 @@
-import { google } from 'googleapis';
-
 export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -12,28 +10,34 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Initialize Google Sheets API
-    const auth = new google.auth.JWT(
-      process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      null,
-      process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      ['https://www.googleapis.com/auth/spreadsheets.readonly']
-    );
-
-    const sheets = google.sheets({ version: 'v4', auth });
+    // Google Sheets configuration
     const spreadsheetId = process.env.GOOGLE_SHEET_ID || '1pLsxrfU5NgHF4aNLXNnCCvGgBvKO4EKjb44iiVvUp5Q';
-
-    // Get data from FORMATTED_TRANSACTIONS sheet
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: 'FORMATTED_TRANSACTIONS!A1:L1000', // Get headers + data
+    const range = 'FORMATTED_TRANSACTIONS!A1:L1000';
+    
+    // Get access token using service account
+    const accessToken = await getAccessToken();
+    
+    // Fetch data from Google Sheets using REST API
+    const sheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`;
+    
+    const response = await fetch(sheetsUrl, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
     });
 
-    const rows = response.data.values;
+    if (!response.ok) {
+      throw new Error(`Google Sheets API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const rows = data.values || [];
     
-    if (!rows || rows.length === 0) {
+    if (rows.length === 0) {
       return res.status(200).json({ 
         transactions: [], 
+        walletBalances: {},
         message: 'No data found in sheets' 
       });
     }
@@ -82,7 +86,8 @@ export default async function handler(req, res) {
       transactions,
       walletBalances,
       lastUpdated: new Date().toISOString(),
-      totalRows: transactions.length
+      totalRows: transactions.length,
+      source: 'Google Sheets Direct API'
     });
 
   } catch (error) {
@@ -92,9 +97,110 @@ export default async function handler(req, res) {
     res.status(500).json({
       error: 'Failed to fetch data from Google Sheets',
       details: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      timestamp: new Date().toISOString()
     });
   }
+}
+
+// Get Google OAuth2 access token using service account
+async function getAccessToken() {
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  
+  if (!clientEmail || !privateKey) {
+    throw new Error('Missing Google service account credentials');
+  }
+
+  // Create JWT payload
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    iss: clientEmail,
+    scope: 'https://www.googleapis.com/auth/spreadsheets.readonly',
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: now + 3600,
+    iat: now
+  };
+
+  // Create JWT token
+  const token = await createJWT(payload, privateKey);
+  
+  // Exchange JWT for access token
+  const response = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: token
+    })
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`OAuth2 error: ${response.status} ${error}`);
+  }
+
+  const data = await response.json();
+  return data.access_token;
+}
+
+// Simple JWT creation without external libraries
+async function createJWT(payload, privateKey) {
+  // Base64 URL encode
+  const base64URLEncode = (obj) => {
+    return Buffer.from(JSON.stringify(obj))
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+  };
+
+  // JWT Header
+  const header = base64URLEncode({
+    alg: 'RS256',
+    typ: 'JWT'
+  });
+
+  // JWT Payload
+  const encodedPayload = base64URLEncode(payload);
+
+  // Create signature (simplified - in production should use proper crypto)
+  const data = `${header}.${encodedPayload}`;
+  
+  // For Vercel, we'll use the Web Crypto API
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(privateKey);
+  const signData = encoder.encode(data);
+  
+  // Import the private key
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8',
+    keyData,
+    {
+      name: 'RSASSA-PKCS1-v1_5',
+      hash: 'SHA-256'
+    },
+    false,
+    ['sign']
+  );
+
+  // Sign the data
+  const signature = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    cryptoKey,
+    signData
+  );
+
+  // Convert signature to base64url
+  const signatureBase64 = Buffer.from(signature)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+
+  return `${data}.${signatureBase64}`;
 }
 
 // Helper function to determine network from asset
