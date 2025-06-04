@@ -1,5 +1,5 @@
 // File: api/fetch-exchange-data.js
-// ENHANCED VERSION - Handles POST requests with API credential
+// ENHANCED VERSION - Handles POST requests with API credentials
 // This will solve the Binance 451 errors and P2P issues
 
 import crypto from 'crypto';
