@@ -1,5 +1,5 @@
 // File: api/fetch-exchange-data.js
-// ENHANCED VERSION - Handles POST requests with API credentials
+// ENHANCED VERSION - Handles POST requests with API credentials/ENHANCED VERSION - Handles POST requests with API credentials
 
 
 import crypto from 'crypto';
