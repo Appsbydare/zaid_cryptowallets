@@ -10,6 +10,8 @@
     "recharts": "^2.8.0",
     "lucide-react": "^0.263.1",
     "google-spreadsheet": "^4.1.2"
+    "google-auth-library": "^9.0.0",
+    "googleapis": "^126.0.0"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -24,10 +26,5 @@
     "production": [">0.2%", "not dead", "not op_mini all"],
     "development": ["last 1 chrome version", "last 1 firefox version", "last 1 safari version"]
   }
-  {
-  "dependencies": {
-    "google-auth-library": "^9.0.0",
-    "googleapis": "^126.0.0"
-  }
-}
+
 }
