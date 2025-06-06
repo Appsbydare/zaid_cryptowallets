@@ -1,6 +1,7 @@
 // ===========================================
-// ENHANCED VERCEL API - HIGHER LIMITS + DATE FILTERING
-// Replace your api/crypto-to-sheets.js with this
+// COMPLETE ENHANCED CRYPTO API WITH SAFE DEDUPLICATION
+// Replace your entire api/crypto-to-sheets.js with this file
+// Features: Higher limits, Date filtering, Deduplication, AED filter, Safe append
 // ===========================================
 
 import { GoogleAuth } from 'google-auth-library';
@@ -19,7 +20,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    console.log('🚀 Starting ENHANCED crypto data fetch...');
+    console.log('🚀 Starting COMPLETE ENHANCED crypto data fetch...');
 
     // Get date filtering from request or use defaults
     const startDate = req.body?.startDate || '2025-05-31T00:00:00.000Z';
@@ -213,10 +214,10 @@ export default async function handler(req, res) {
     }
 
     // ===========================================
-    // STEP 4: WRITE TO GOOGLE SHEETS
+    // STEP 4: WRITE TO GOOGLE SHEETS WITH ENHANCED DEDUPLICATION
     // ===========================================
-    console.log(`🔥 Writing ${allTransactions.length} ENHANCED transactions to Google Sheets...`);
-    console.log(`📊 Total found: ${totalTransactionsFound}, After deduplication: ${allTransactions.length}`);
+    console.log(`🔥 Processing ${allTransactions.length} ENHANCED transactions with SAFE deduplication...`);
+    console.log(`📊 Total found: ${totalTransactionsFound}, Raw collected: ${allTransactions.length}`);
     
     let sheetsResult = { success: false, withdrawalsAdded: 0, depositsAdded: 0 };
     
@@ -244,22 +245,30 @@ export default async function handler(req, res) {
     }
 
     // ===========================================
-    // STEP 5: RETURN ENHANCED RESULTS
+    // STEP 5: RETURN ENHANCED RESULTS WITH DEDUPLICATION STATS
     // ===========================================
     res.status(200).json({
       success: true,
-      message: 'ENHANCED data processing completed',
+      message: 'COMPLETE ENHANCED data processing with safe deduplication completed',
       transactions: allTransactions.length,
       totalFound: totalTransactionsFound,
       dateFilter: startDate,
       sheetsResult: sheetsResult,
       apiStatus: apiStatusResults,
+      deduplicationStats: {
+        rawTransactions: allTransactions.length,
+        afterDeduplication: sheetsResult.totalAfterDedup || 0,
+        afterValueFilter: sheetsResult.totalAfterFilter || 0,
+        duplicatesRemoved: sheetsResult.duplicatesRemoved || 0,
+        valueFiltered: sheetsResult.filteredOut || 0,
+        finalAdded: (sheetsResult.withdrawalsAdded || 0) + (sheetsResult.depositsAdded || 0)
+      },
       summary: {
         binanceAccounts: Object.keys(apiStatusResults).filter(k => k.includes('Binance')).length,
         blockchainWallets: Object.keys(apiStatusResults).filter(k => k.includes('Wallet')).length,
         activeAPIs: Object.values(apiStatusResults).filter(s => s.status === 'Active').length,
         errorAPIs: Object.values(apiStatusResults).filter(s => s.status === 'Error').length,
-        enhancedLimits: 'Applied'
+        enhancedFeatures: 'Deduplication + Value Filter + Safe Append + Ascending Sort'
       },
       timestamp: new Date().toISOString()
     });
@@ -860,10 +869,166 @@ async function fetchSolanaEnhanced(address, filterDate) {
 }
 
 // ===========================================
-// MODIFY ONLY THIS SECTION in writeToGoogleSheetsWithStatus function
-// Find this section around line 550 and replace it:
+// SAFE DEDUPLICATION AND FILTERING FUNCTIONS
 // ===========================================
 
+/**
+ * Read existing transaction IDs from Google Sheets to prevent duplicates
+ * *** ONLY READS - NEVER MODIFIES EXISTING DATA ***
+ */
+async function getExistingTransactionIds(sheets, spreadsheetId) {
+  const existingTxIds = new Set();
+  
+  try {
+    console.log('🔍 Reading existing transaction IDs for deduplication...');
+    
+    // Read from Withdrawals sheet (READ ONLY)
+    try {
+      const withdrawalsRange = 'Withdrawals!A7:L1000'; // Skip headers, read up to row 1000
+      const withdrawalsResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: withdrawalsRange,
+      });
+      
+      const withdrawalsData = withdrawalsResponse.data.values || [];
+      withdrawalsData.forEach(row => {
+        if (row[11]) { // TX ID is in column L (index 11)
+          existingTxIds.add(row[11].toString().trim());
+        }
+      });
+      console.log(`📤 Found ${withdrawalsData.length} existing withdrawals (READ ONLY)`);
+    } catch (error) {
+      console.log('⚠️ Could not read withdrawals sheet (might be empty)');
+    }
+    
+    // Read from Deposits sheet (READ ONLY)
+    try {
+      const depositsRange = 'Deposits!A7:L1000'; // Skip headers, read up to row 1000
+      const depositsResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: depositsRange,
+      });
+      
+      const depositsData = depositsResponse.data.values || [];
+      depositsData.forEach(row => {
+        if (row[11]) { // TX ID is in column L (index 11)
+          existingTxIds.add(row[11].toString().trim());
+        }
+      });
+      console.log(`📥 Found ${depositsData.length} existing deposits (READ ONLY)`);
+    } catch (error) {
+      console.log('⚠️ Could not read deposits sheet (might be empty)');
+    }
+    
+    console.log(`🎯 Total unique TX IDs found: ${existingTxIds.size}`);
+    return existingTxIds;
+    
+  } catch (error) {
+    console.error('❌ Error reading existing transactions:', error);
+    return new Set(); // Return empty set if read fails
+  }
+}
+
+/**
+ * Filter out duplicate transactions based on TX ID
+ */
+function removeDuplicateTransactions(transactions, existingTxIds) {
+  let duplicateCount = 0;
+  let totalCount = transactions.length;
+  
+  const newTransactions = transactions.filter(tx => {
+    const txId = tx.tx_id?.toString().trim();
+    
+    if (!txId) {
+      // Keep transactions without TX ID (shouldn't happen but be safe)
+      return true;
+    }
+    
+    const isDuplicate = existingTxIds.has(txId);
+    if (isDuplicate) {
+      duplicateCount++;
+    }
+    
+    return !isDuplicate;
+  });
+  
+  console.log(`🔄 Duplicate Filter: ${totalCount} → ${newTransactions.length} transactions (removed ${duplicateCount} duplicates)`);
+  
+  return newTransactions;
+}
+
+/**
+ * Filter transactions by minimum AED value (3.6 AED)
+ */
+function filterTransactionsByValue(transactions) {
+  // Current crypto prices in AED
+  const pricesAED = {
+    'BTC': 220200,
+    'ETH': 11010,
+    'USDT': 3.67,
+    'USDC': 3.67,
+    'SOL': 181.50,
+    'TRX': 0.37,
+    'BNB': 2200,
+    'SEI': 1.47,
+    'BUSD': 3.67
+  };
+
+  const minValueAED = 3.6;
+  let filteredCount = 0;
+  let totalCount = transactions.length;
+
+  const filtered = transactions.filter(tx => {
+    // Calculate AED value
+    const amount = parseFloat(tx.amount) || 0;
+    const priceAED = pricesAED[tx.asset] || 0;
+    const aedValue = amount * priceAED;
+    
+    // Keep transactions >= 3.6 AED
+    const keepTransaction = aedValue >= minValueAED;
+    
+    if (!keepTransaction) {
+      filteredCount++;
+    }
+    
+    return keepTransaction;
+  });
+
+  console.log(`💰 Value Filter: ${totalCount} → ${filtered.length} transactions (removed ${filteredCount} < 3.6 AED)`);
+  
+  return filtered;
+}
+
+/**
+ * Sort transactions by timestamp in ASCENDING order (oldest first)
+ * *** ONLY sorts NEW transactions - never touches existing data ***
+ */
+function sortTransactionsByTimestamp(transactions) {
+  console.log(`⏰ Sorting ${transactions.length} NEW transactions by timestamp (ascending - oldest first)...`);
+  
+  const sorted = [...transactions].sort((a, b) => {
+    const dateA = new Date(a.timestamp);
+    const dateB = new Date(b.timestamp);
+    return dateA - dateB; // Ascending order (oldest first)
+  });
+  
+  if (sorted.length > 0) {
+    const oldestDate = new Date(sorted[0].timestamp).toISOString().slice(0, 16);
+    const newestDate = new Date(sorted[sorted.length - 1].timestamp).toISOString().slice(0, 16);
+    console.log(`📅 Date range: ${oldestDate} → ${newestDate} (${sorted.length} transactions)`);
+  }
+  
+  return sorted;
+}
+
+// ===========================================
+// ENHANCED GOOGLE SHEETS FUNCTIONS WITH SAFE DEDUPLICATION
+// ===========================================
+
+/**
+ * Enhanced writeToGoogleSheetsWithStatus with safe deduplication and ascending append
+ * *** NEVER MODIFIES EXISTING DATA - ONLY APPENDS NEW SORTED TRANSACTIONS ***
+ */
 async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
   try {
     console.log('🔑 Setting up Google Sheets authentication...');
@@ -889,25 +1054,59 @@ async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
     const sheets = google.sheets({ version: 'v4', auth });
     const spreadsheetId = '1pLsxrfU5NgHF4aNLXNnCCvGgBvKO4EKjb44iiVvUp5Q';
 
-    // *** NEW: Apply AED value filter before processing ***
-    const filteredTransactions = filterTransactionsByValue(transactions);
-    console.log(`💰 After AED filter: ${filteredTransactions.length} transactions (min 3.6 AED)`);
+    console.log(`📊 Starting with ${transactions.length} raw transactions`);
 
-    // Write transactions (using filtered list)
-    const withdrawals = filteredTransactions.filter(tx => tx.type === 'withdrawal');
-    const deposits = filteredTransactions.filter(tx => tx.type === 'deposit');
+    // *** STEP 1: Get existing transaction IDs for deduplication (READ ONLY) ***
+    const existingTxIds = await getExistingTransactionIds(sheets, spreadsheetId);
+
+    // *** STEP 2: Remove duplicates based on TX ID ***
+    const uniqueTransactions = removeDuplicateTransactions(transactions, existingTxIds);
+
+    // *** STEP 3: Apply AED value filter ***
+    const filteredTransactions = filterTransactionsByValue(uniqueTransactions);
+
+    // *** STEP 4: Sort NEW transactions by timestamp (ascending - oldest first) ***
+    const sortedTransactions = sortTransactionsByTimestamp(filteredTransactions);
+
+    console.log(`🎯 Final result: ${transactions.length} → ${sortedTransactions.length} NEW transactions to append`);
+    console.log(`🛡️ SAFETY: Existing data will NOT be touched - only appending new transactions`);
+
+    // If no new transactions, just update status
+    if (sortedTransactions.length === 0) {
+      console.log('ℹ️ No new transactions to append after deduplication and filtering');
+      await updateSettingsStatus(sheets, spreadsheetId, apiStatus);
+      
+      return {
+        success: true,
+        withdrawalsAdded: 0,
+        depositsAdded: 0,
+        statusUpdated: true,
+        totalRaw: transactions.length,
+        totalAfterDedup: uniqueTransactions.length,
+        totalAfterFilter: filteredTransactions.length,
+        duplicatesRemoved: transactions.length - uniqueTransactions.length,
+        filteredOut: uniqueTransactions.length - filteredTransactions.length
+      };
+    }
+
+    // Split sorted transactions by type
+    const sortedWithdrawals = sortedTransactions.filter(tx => tx.type === 'withdrawal');
+    const sortedDeposits = sortedTransactions.filter(tx => tx.type === 'deposit');
 
     let withdrawalsAdded = 0;
     let depositsAdded = 0;
 
-    // Write withdrawals (rest stays the same)
-    if (withdrawals.length > 0) {
-      const withdrawalRows = withdrawals.map(tx => [
-        '', '', '', '', '', // Green columns for accountant
+    // *** APPEND sorted withdrawals at bottom (NEVER touch existing data) ***
+    if (sortedWithdrawals.length > 0) {
+      console.log(`📤 APPENDING ${sortedWithdrawals.length} new withdrawals at bottom (ascending order)...`);
+      
+      const withdrawalRows = sortedWithdrawals.map(tx => [
+        '', '', '', '', '', // Green columns for accountant (empty for them to fill)
         tx.platform, tx.asset, parseFloat(tx.amount).toFixed(8),
         formatDateTimeSimple(tx.timestamp), tx.from_address, tx.to_address, tx.tx_id
       ]);
 
+      // APPEND (not overwrite) - this adds at the bottom
       await sheets.spreadsheets.values.append({
         spreadsheetId,
         range: 'Withdrawals!A:L',
@@ -915,17 +1114,21 @@ async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
         requestBody: { values: withdrawalRows }
       });
       
-      withdrawalsAdded = withdrawals.length;
+      withdrawalsAdded = sortedWithdrawals.length;
+      console.log(`✅ APPENDED ${withdrawalsAdded} withdrawals at bottom`);
     }
 
-    // Write deposits (rest stays the same)
-    if (deposits.length > 0) {
-      const depositRows = deposits.map(tx => [
-        '', '', '', '', '', // Green columns for accountant
+    // *** APPEND sorted deposits at bottom (NEVER touch existing data) ***
+    if (sortedDeposits.length > 0) {
+      console.log(`📥 APPENDING ${sortedDeposits.length} new deposits at bottom (ascending order)...`);
+      
+      const depositRows = sortedDeposits.map(tx => [
+        '', '', '', '', '', // Green columns for accountant (empty for them to fill)
         tx.platform, tx.asset, parseFloat(tx.amount).toFixed(8),
         formatDateTimeSimple(tx.timestamp), tx.from_address, tx.to_address, tx.tx_id
       ]);
 
+      // APPEND (not overwrite) - this adds at the bottom
       await sheets.spreadsheets.values.append({
         spreadsheetId,
         range: 'Deposits!A:L',
@@ -933,24 +1136,32 @@ async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
         requestBody: { values: depositRows }
       });
       
-      depositsAdded = deposits.length;
+      depositsAdded = sortedDeposits.length;
+      console.log(`✅ APPENDED ${depositsAdded} deposits at bottom`);
     }
 
-    // Update Settings status table (unchanged)
+    // Update Settings status table
     await updateSettingsStatus(sheets, spreadsheetId, apiStatus);
 
-    return {
+    const result = {
       success: true,
       withdrawalsAdded: withdrawalsAdded,
       depositsAdded: depositsAdded,
       statusUpdated: true,
-      totalBeforeFilter: transactions.length,
+      totalRaw: transactions.length,
+      totalAfterDedup: uniqueTransactions.length,
       totalAfterFilter: filteredTransactions.length,
-      filteredOut: transactions.length - filteredTransactions.length
+      duplicatesRemoved: transactions.length - uniqueTransactions.length,
+      filteredOut: uniqueTransactions.length - filteredTransactions.length,
+      safetyNote: "Only appended new transactions - existing data untouched"
     };
 
+    console.log('🎉 SAFE enhanced deduplication completed:', result);
+    console.log('🛡️ GUARANTEE: No existing accountant data was modified');
+    return result;
+
   } catch (error) {
-    console.error('❌ Error writing to Google Sheets:', error);
+    console.error('❌ Error in enhanced writeToGoogleSheetsWithStatus:', error);
     throw error;
   }
 }
@@ -1057,52 +1268,4 @@ function createQueryString(params) {
 function formatDateTimeSimple(isoString) {
   const date = new Date(isoString);
   return date.toISOString().slice(0, 16).replace('T', ' ');
-}
-// ===========================================
-// OPTION A: SAFE AED FILTER ADDITION
-// Only add 3.6 AED minimum filter - no other changes
-// ===========================================
-
-// ADD THIS FUNCTION after the existing utility functions (around line 800+)
-
-/**
- * Filter transactions by minimum AED value (3.6 AED)
- */
-function filterTransactionsByValue(transactions) {
-  // Current crypto prices in AED
-  const pricesAED = {
-    'BTC': 220200,
-    'ETH': 11010,
-    'USDT': 3.67,
-    'USDC': 3.67,
-    'SOL': 181.50,
-    'TRX': 0.37,
-    'BNB': 2200,
-    'SEI': 1.47,
-    'BUSD': 3.67
-  };
-
-  const minValueAED = 3.6;
-  let filteredCount = 0;
-  let totalCount = transactions.length;
-
-  const filtered = transactions.filter(tx => {
-    // Calculate AED value
-    const amount = parseFloat(tx.amount) || 0;
-    const priceAED = pricesAED[tx.asset] || 0;
-    const aedValue = amount * priceAED;
-    
-    // Keep transactions >= 3.6 AED
-    const keepTransaction = aedValue >= minValueAED;
-    
-    if (!keepTransaction) {
-      filteredCount++;
-    }
-    
-    return keepTransaction;
-  });
-
-  console.log(`💰 Value Filter: ${totalCount} → ${filtered.length} transactions (removed ${filteredCount} < 3.6 AED)`);
-  
-  return filtered;
 }
