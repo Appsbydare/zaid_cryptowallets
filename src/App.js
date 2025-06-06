@@ -60,12 +60,12 @@ const CryptoTrackerProduction = () => {
     fetchDataFromSheets();
   }, []);
 
-  // Calculate totals in AED
-  const getTotalValues = () => {
+  // Calculate totals in AED (accepts filtered transactions)
+  const getTotalValues = (transactions = transactionData) => {
     let totalDeposits = 0;
     let totalWithdrawals = 0;
     
-    transactionData.forEach(tx => {
+    transactions.forEach(tx => {
       const aedValue = parseFloat(tx.amount_aed) || 0;
       if (tx.type === "deposit") {
         totalDeposits += aedValue;
@@ -136,10 +136,10 @@ const CryptoTrackerProduction = () => {
     return filtered;
   };
 
-  const totals = getTotalValues();
   const portfolioValue = getPortfolioValue();
   const platforms = ['All', ...new Set(transactionData.map(tx => tx.platform))];
   const filteredTransactions = getFilteredTransactions();
+  const totals = getTotalValues(filteredTransactions);
 
   // Prepare chart data
   const preparePlatformChart = () => {
