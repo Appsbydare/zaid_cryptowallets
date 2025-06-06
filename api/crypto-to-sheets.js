@@ -1,6 +1,10 @@
 // ===========================================
-// SIMPLE WORKING VERSION - api/crypto-to-sheets.js
+// VERCEL API WITH SIMPLE GOOGLE SHEETS WRITING
+// Replace your api/crypto-to-sheets.js with this
 // ===========================================
+
+import { GoogleAuth } from 'google-auth-library';
+import { google } from 'googleapis';
 
 export default async function handler(req, res) {
   // Set CORS headers
@@ -14,19 +18,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    console.log('🚀 Starting simple crypto data fetch...');
+    console.log('🚀 Starting crypto data fetch with sheets writing...');
 
     const allTransactions = [];
     const apiStatusResults = {};
 
     // ===========================================
-    // STEP 1: TEST BASIC FUNCTIONALITY FIRST
-    // ===========================================
-    
-    console.log('✅ Basic function structure working');
-
-    // ===========================================
-    // STEP 2: FETCH BLOCKCHAIN DATA (SIMPLE)
+    // STEP 1: FETCH BLOCKCHAIN DATA
     // ===========================================
     console.log('🧪 Fetching blockchain data...');
     
@@ -110,14 +108,35 @@ export default async function handler(req, res) {
     }
 
     // ===========================================
-    // STEP 3: RETURN RESULTS (WITHOUT SHEETS WRITE FOR NOW)
+    // STEP 2: WRITE TO GOOGLE SHEETS (SIMPLE)
     // ===========================================
+    console.log(`📊 Writing ${allTransactions.length} transactions to Google Sheets...`);
+    
+    let sheetsResult = { success: false, withdrawalsAdded: 0, depositsAdded: 0 };
+    
+    if (allTransactions.length > 0) {
+      try {
+        sheetsResult = await writeToGoogleSheetsSimple(allTransactions);
+        console.log('✅ Google Sheets write successful:', sheetsResult);
+      } catch (sheetsError) {
+        console.error('❌ Google Sheets write failed:', sheetsError);
+        sheetsResult = { 
+          success: false, 
+          error: sheetsError.message,
+          withdrawalsAdded: 0, 
+          depositsAdded: 0 
+        };
+      }
+    }
 
+    // ===========================================
+    // STEP 3: RETURN RESULTS
+    // ===========================================
     res.status(200).json({
       success: true,
-      message: 'Data successfully fetched (Google Sheets write disabled for testing)',
+      message: 'Data successfully processed',
       transactions: allTransactions.length,
-      details: allTransactions,
+      sheetsResult: sheetsResult,
       apiStatus: apiStatusResults,
       timestamp: new Date().toISOString()
     });
@@ -128,14 +147,131 @@ export default async function handler(req, res) {
     res.status(500).json({
       success: false,
       error: error.message,
-      stack: error.stack,
       timestamp: new Date().toISOString()
     });
   }
 }
 
 // ===========================================
-// SIMPLE BLOCKCHAIN API FUNCTIONS
+// SIMPLE GOOGLE SHEETS INTEGRATION
+// ===========================================
+
+async function writeToGoogleSheetsSimple(transactions) {
+  try {
+    console.log('🔑 Setting up Google Sheets authentication...');
+    
+    // Create service account credentials from environment variables
+    const credentials = {
+      type: "service_account",
+      project_id: process.env.GOOGLE_PROJECT_ID,
+      private_key_id: process.env.GOOGLE_PRIVATE_KEY_ID,
+      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      client_email: process.env.GOOGLE_CLIENT_EMAIL,
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      auth_uri: "https://accounts.google.com/o/oauth2/auth",
+      token_uri: "https://oauth2.googleapis.com/token",
+      auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+      client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${process.env.GOOGLE_CLIENT_EMAIL}`
+    };
+
+    const auth = new GoogleAuth({
+      credentials: credentials,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+
+    const sheets = google.sheets({ version: 'v4', auth });
+    const spreadsheetId = '1pLsxrfU5NgHF4aNLXNnCCvGgBvKO4EKjb44iiVvUp5Q';
+
+    console.log('📝 Separating withdrawals and deposits...');
+    
+    // Separate withdrawals and deposits
+    const withdrawals = transactions.filter(tx => tx.type === 'withdrawal');
+    const deposits = transactions.filter(tx => tx.type === 'deposit');
+
+    console.log(`📤 ${withdrawals.length} withdrawals, 📥 ${deposits.length} deposits`);
+
+    let withdrawalsAdded = 0;
+    let depositsAdded = 0;
+
+    // Write withdrawals to Withdrawals sheet
+    if (withdrawals.length > 0) {
+      console.log('📤 Writing withdrawals...');
+      
+      const withdrawalRows = withdrawals.map(tx => [
+        '', // Client (accountant fills)
+        '', // Amount (AED) (accountant fills)  
+        '', // Amount (USDT) (accountant fills)
+        '', // Sell Rate (accountant fills)
+        '', // Remark (accountant fills)
+        tx.platform, // Platform (auto)
+        tx.asset, // Asset (auto)
+        parseFloat(tx.amount).toFixed(8), // Amount (auto)
+        formatDateTimeSimple(tx.timestamp), // Timestamp (auto)
+        tx.from_address, // From Address (auto)
+        tx.to_address, // To Address (auto)
+        tx.tx_id // TX ID (auto)
+      ]);
+
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: 'Withdrawals!A:L',
+        valueInputOption: 'RAW',
+        requestBody: {
+          values: withdrawalRows
+        }
+      });
+      
+      withdrawalsAdded = withdrawals.length;
+      console.log(`✅ Added ${withdrawalsAdded} withdrawals`);
+    }
+
+    // Write deposits to Deposits sheet
+    if (deposits.length > 0) {
+      console.log('📥 Writing deposits...');
+      
+      const depositRows = deposits.map(tx => [
+        '', // Client (accountant fills)
+        '', // AED (accountant fills)
+        '', // USDT (accountant fills)  
+        '', // Rate (accountant fills)
+        '', // Remarks (accountant fills)
+        tx.platform, // Platform (auto)
+        tx.asset, // Asset (auto)
+        parseFloat(tx.amount).toFixed(8), // Amount (auto)
+        formatDateTimeSimple(tx.timestamp), // Timestamp (auto)
+        tx.from_address, // From Address (auto)
+        tx.to_address, // To Address (auto)
+        tx.tx_id // TX ID (auto)
+      ]);
+
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: 'Deposits!A:L',
+        valueInputOption: 'RAW',
+        requestBody: {
+          values: depositRows
+        }
+      });
+      
+      depositsAdded = deposits.length;
+      console.log(`✅ Added ${depositsAdded} deposits`);
+    }
+
+    return {
+      success: true,
+      withdrawalsAdded: withdrawalsAdded,
+      depositsAdded: depositsAdded,
+      statusUpdated: true
+    };
+
+  } catch (error) {
+    console.error('❌ Error writing to Google Sheets:', error);
+    throw error;
+  }
+}
+
+// ===========================================
+// BLOCKCHAIN API FUNCTIONS (SAME AS BEFORE)
 // ===========================================
 
 /**
@@ -303,4 +439,13 @@ async function fetchTronSimple(address) {
     console.error("TRON API error:", error);
     throw error;
   }
+}
+
+// ===========================================
+// UTILITY FUNCTIONS
+// ===========================================
+
+function formatDateTimeSimple(isoString) {
+  const date = new Date(isoString);
+  return date.toISOString().slice(0, 16).replace('T', ' ');
 }
