@@ -492,6 +492,14 @@ async function testByBitAccountVercel(config) {
 // BLOCKCHAIN API FUNCTIONS (VERCEL VERSION)
 // ===========================================
 
+// ===========================================
+// COMPLETE BLOCKCHAIN API FUNCTIONS FOR VERCEL
+// Add this to your api/crypto-to-sheets.js file
+// ===========================================
+
+/**
+ * COMPLETE: Fetch blockchain data with all wallet implementations
+ */
 async function fetchBlockchainDataVercel() {
   const transactions = [];
   const apiStatus = {};
@@ -504,6 +512,7 @@ async function fetchBlockchainDataVercel() {
   };
 
   // Bitcoin transactions
+  console.log("🧪 Testing Bitcoin API...");
   try {
     const btcTxs = await fetchBitcoinTransactionsVercel(wallets.BTC);
     transactions.push(...btcTxs);
@@ -514,6 +523,7 @@ async function fetchBlockchainDataVercel() {
       notes: `✅ ${btcTxs.length} transactions found`,
       transactionCount: btcTxs.length
     };
+    console.log(`✅ Bitcoin: ${btcTxs.length} transactions`);
   } catch (error) {
     apiStatus['Bitcoin Wallet'] = {
       status: 'Error',
@@ -522,14 +532,497 @@ async function fetchBlockchainDataVercel() {
       notes: `❌ ${error.message}`,
       transactionCount: 0
     };
+    console.error(`❌ Bitcoin error:`, error.message);
   }
 
-  // Similar for other blockchains...
-  
+  // Ethereum transactions
+  console.log("🧪 Testing Ethereum API...");
+  try {
+    const ethTxs = await fetchEthereumTransactionsVercel(wallets.ETH);
+    transactions.push(...ethTxs);
+    apiStatus['Ethereum Wallet'] = {
+      status: 'Active',
+      lastSync: new Date().toISOString(),
+      autoUpdate: 'Every Hour',
+      notes: `✅ ${ethTxs.length} transactions found`,
+      transactionCount: ethTxs.length
+    };
+    console.log(`✅ Ethereum: ${ethTxs.length} transactions`);
+  } catch (error) {
+    apiStatus['Ethereum Wallet'] = {
+      status: 'Error',
+      lastSync: new Date().toISOString(),
+      autoUpdate: 'Every Hour',
+      notes: `❌ ${error.message}`,
+      transactionCount: 0
+    };
+    console.error(`❌ Ethereum error:`, error.message);
+  }
+
+  // TRON transactions
+  console.log("🧪 Testing TRON API...");
+  try {
+    const tronTxs = await fetchTronTransactionsVercel(wallets.TRON);
+    transactions.push(...tronTxs);
+    apiStatus['TRON Wallet'] = {
+      status: 'Active',
+      lastSync: new Date().toISOString(),
+      autoUpdate: 'Every Hour',
+      notes: `✅ ${tronTxs.length} transactions found`,
+      transactionCount: tronTxs.length
+    };
+    console.log(`✅ TRON: ${tronTxs.length} transactions`);
+  } catch (error) {
+    apiStatus['TRON Wallet'] = {
+      status: 'Error',
+      lastSync: new Date().toISOString(),
+      autoUpdate: 'Every Hour',
+      notes: `❌ ${error.message}`,
+      transactionCount: 0
+    };
+    console.error(`❌ TRON error:`, error.message);
+  }
+
+  // Solana transactions
+  console.log("🧪 Testing Solana API...");
+  try {
+    const solTxs = await fetchSolanaTransactionsVercel(wallets.SOL);
+    transactions.push(...solTxs);
+    apiStatus['Solana Wallet'] = {
+      status: 'Active',
+      lastSync: new Date().toISOString(),
+      autoUpdate: 'Every Hour',
+      notes: `✅ ${solTxs.length} transactions found`,
+      transactionCount: solTxs.length
+    };
+    console.log(`✅ Solana: ${solTxs.length} transactions`);
+  } catch (error) {
+    apiStatus['Solana Wallet'] = {
+      status: 'Error',
+      lastSync: new Date().toISOString(),
+      autoUpdate: 'Every Hour',
+      notes: `❌ ${error.message}`,
+      transactionCount: 0
+    };
+    console.error(`❌ Solana error:`, error.message);
+  }
+
   return {
     transactions: transactions,
     apiStatus: apiStatus
   };
+}
+
+/**
+ * Fetch Ethereum transactions using Etherscan API
+ */
+async function fetchEthereumTransactionsVercel(address) {
+  try {
+    // Use your Etherscan API key
+    const apiKey = "SP8YA4W8RDB85G9129BTDHY72ADBZ6USHA";
+    const endpoint = `https://api.etherscan.io/api?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=desc&apikey=${apiKey}`;
+    
+    const response = await fetch(endpoint);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+    }
+    
+    const data = await response.json();
+    
+    if (data.status !== "1") {
+      console.error("Etherscan API error:", data.message);
+      return [];
+    }
+    
+    const transactions = [];
+    
+    data.result.slice(0, 50).forEach(tx => {
+      const isDeposit = tx.to.toLowerCase() === address.toLowerCase();
+      const amount = (parseInt(tx.value) / Math.pow(10, 18)).toString();
+      
+      if (parseFloat(amount) > 0) {
+        transactions.push({
+          platform: "Ethereum Wallet",
+          type: isDeposit ? "deposit" : "withdrawal",
+          asset: "ETH",
+          amount: amount,
+          timestamp: new Date(parseInt(tx.timeStamp) * 1000).toISOString(),
+          from_address: tx.from,
+          to_address: tx.to,
+          tx_id: tx.hash,
+          status: tx.txreceipt_status === "1" ? "Completed" : "Failed",
+          network: "ETH",
+          api_source: "Etherscan"
+        });
+      }
+    });
+    
+    // Also fetch ERC-20 token transactions
+    const tokenTransactions = await fetchEthereumTokenTransactionsVercel(address, apiKey);
+    transactions.push(...tokenTransactions);
+    
+    return transactions;
+    
+  } catch (error) {
+    console.error("Error fetching Ethereum transactions:", error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch Ethereum ERC-20 token transactions
+ */
+async function fetchEthereumTokenTransactionsVercel(address, apiKey) {
+  try {
+    const endpoint = `https://api.etherscan.io/api?module=account&action=tokentx&address=${address}&startblock=0&endblock=99999999&sort=desc&apikey=${apiKey}`;
+    
+    const response = await fetch(endpoint);
+    
+    if (!response.ok) {
+      return [];
+    }
+    
+    const data = await response.json();
+    
+    if (data.status !== "1") {
+      return [];
+    }
+    
+    const transactions = [];
+    
+    data.result.slice(0, 50).forEach(tx => {
+      const isDeposit = tx.to.toLowerCase() === address.toLowerCase();
+      const decimals = parseInt(tx.tokenDecimal);
+      const amount = (parseInt(tx.value) / Math.pow(10, decimals)).toString();
+      
+      if (parseFloat(amount) > 0) {
+        transactions.push({
+          platform: "Ethereum Wallet",
+          type: isDeposit ? "deposit" : "withdrawal",
+          asset: tx.tokenSymbol,
+          amount: amount,
+          timestamp: new Date(parseInt(tx.timeStamp) * 1000).toISOString(),
+          from_address: tx.from,
+          to_address: tx.to,
+          tx_id: tx.hash,
+          status: "Completed",
+          network: "ERC20",
+          api_source: "Etherscan_Token"
+        });
+      }
+    });
+    
+    return transactions;
+    
+  } catch (error) {
+    console.error("Error fetching Ethereum token transactions:", error);
+    return [];
+  }
+}
+
+/**
+ * Fetch TRON transactions using TronGrid API
+ */
+async function fetchTronTransactionsVercel(address) {
+  try {
+    const endpoint = `https://api.trongrid.io/v1/accounts/${address}/transactions`;
+    
+    const response = await fetch(endpoint);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+    }
+    
+    const data = await response.json();
+    
+    if (!data.data) {
+      console.error("TronGrid API error");
+      return [];
+    }
+    
+    const transactions = [];
+    
+    data.data.slice(0, 50).forEach(tx => {
+      if (tx.raw_data && tx.raw_data.contract) {
+        tx.raw_data.contract.forEach(contract => {
+          if (contract.type === "TransferContract") {
+            const value = contract.parameter.value;
+            const isDeposit = value.to_address === address;
+            const amount = (value.amount / 1000000).toString();
+            
+            transactions.push({
+              platform: "TRON Wallet",
+              type: isDeposit ? "deposit" : "withdrawal",
+              asset: "TRX",
+              amount: amount,
+              timestamp: new Date(tx.block_timestamp).toISOString(),
+              from_address: value.owner_address,
+              to_address: value.to_address,
+              tx_id: tx.txID,
+              status: "Completed",
+              network: "TRON",
+              api_source: "TronGrid"
+            });
+          }
+        });
+      }
+    });
+    
+    // Also fetch TRC-20 token transactions
+    const tokenTransactions = await fetchTronTokenTransactionsVercel(address);
+    transactions.push(...tokenTransactions);
+    
+    return transactions;
+    
+  } catch (error) {
+    console.error("Error fetching TRON transactions:", error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch TRON TRC-20 token transactions
+ */
+async function fetchTronTokenTransactionsVercel(address) {
+  try {
+    const endpoint = `https://api.trongrid.io/v1/accounts/${address}/transactions/trc20`;
+    
+    const response = await fetch(endpoint);
+    
+    if (!response.ok) {
+      return [];
+    }
+    
+    const data = await response.json();
+    
+    if (!data.data) {
+      return [];
+    }
+    
+    const transactions = [];
+    
+    data.data.slice(0, 50).forEach(tx => {
+      const isDeposit = tx.to === address;
+      const decimals = parseInt(tx.token_info.decimals);
+      const amount = (parseInt(tx.value) / Math.pow(10, decimals)).toString();
+      
+      if (parseFloat(amount) > 0) {
+        transactions.push({
+          platform: "TRON Wallet",
+          type: isDeposit ? "deposit" : "withdrawal",
+          asset: tx.token_info.symbol,
+          amount: amount,
+          timestamp: new Date(tx.block_timestamp).toISOString(),
+          from_address: tx.from,
+          to_address: tx.to,
+          tx_id: tx.transaction_id,
+          status: "Completed",
+          network: "TRC20",
+          api_source: "TronGrid_Token"
+        });
+      }
+    });
+    
+    return transactions;
+    
+  } catch (error) {
+    console.error("Error fetching TRON token transactions:", error);
+    return [];
+  }
+}
+
+/**
+ * Fetch Solana transactions using Solana RPC API
+ */
+async function fetchSolanaTransactionsVercel(address) {
+  try {
+    const endpoint = "https://api.mainnet-beta.solana.com";
+    
+    const payload = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "getSignaturesForAddress",
+      params: [address, { limit: 50 }]
+    };
+    
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+    }
+    
+    const data = await response.json();
+    
+    if (data.error) {
+      console.error("Solana RPC error:", data.error);
+      return [];
+    }
+    
+    const transactions = [];
+    
+    // Process first few signatures to get transaction details
+    for (const signature of data.result.slice(0, 10)) {
+      try {
+        const txDetails = await getSolanaTransactionDetailsVercel(signature.signature);
+        if (txDetails) {
+          transactions.push(...txDetails);
+        }
+      } catch (error) {
+        console.log(`Error getting Solana tx details for ${signature.signature}:`, error.message);
+        continue;
+      }
+    }
+    
+    return transactions;
+    
+  } catch (error) {
+    console.error("Error fetching Solana transactions:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get detailed Solana transaction information
+ */
+async function getSolanaTransactionDetailsVercel(signature) {
+  try {
+    const endpoint = "https://api.mainnet-beta.solana.com";
+    
+    const payload = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "getTransaction",
+      params: [signature, { encoding: "json", maxSupportedTransactionVersion: 0 }]
+    };
+    
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      return null;
+    }
+    
+    const data = await response.json();
+    
+    if (data.error || !data.result) {
+      return null;
+    }
+    
+    const tx = data.result;
+    const transactions = [];
+    
+    if (tx.meta && tx.meta.preBalances && tx.meta.postBalances) {
+      const accountKeys = tx.transaction.message.accountKeys;
+      
+      for (let i = 0; i < accountKeys.length; i++) {
+        const preBalance = tx.meta.preBalances[i];
+        const postBalance = tx.meta.postBalances[i];
+        const balanceChange = postBalance - preBalance;
+        
+        if (Math.abs(balanceChange) > 0) {
+          const amount = Math.abs(balanceChange) / 1000000000;
+          
+          transactions.push({
+            platform: "Solana Wallet",
+            type: balanceChange > 0 ? "deposit" : "withdrawal",
+            asset: "SOL",
+            amount: amount.toString(),
+            timestamp: new Date(tx.blockTime * 1000).toISOString(),
+            from_address: balanceChange > 0 ? "External" : accountKeys[i],
+            to_address: balanceChange > 0 ? accountKeys[i] : "External",
+            tx_id: signature,
+            status: tx.meta.err ? "Failed" : "Completed",
+            network: "SOL",
+            api_source: "Solana_RPC"
+          });
+        }
+      }
+    }
+    
+    return transactions;
+    
+  } catch (error) {
+    console.error("Error getting Solana transaction details:", error);
+    return null;
+  }
+}
+
+/**
+ * ENHANCED: Fetch Bitcoin transactions with rate limiting
+ */
+async function fetchBitcoinTransactionsVercel(address) {
+  try {
+    // Add delay to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+    
+    const endpoint = `https://blockchain.info/rawaddr/${address}`;
+    const response = await fetch(endpoint);
+    
+    if (response.status === 429) {
+      console.log("⏳ Bitcoin API rate limited");
+      return [];
+    }
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+    }
+    
+    const data = await response.json();
+    const transactions = [];
+    
+    data.txs.slice(0, 50).forEach(tx => {
+      const isDeposit = tx.out.some(output => output.addr === address);
+      const isWithdrawal = tx.inputs.some(input => input.prev_out && input.prev_out.addr === address);
+      
+      if (isDeposit) {
+        const output = tx.out.find(o => o.addr === address);
+        transactions.push({
+          platform: "Bitcoin Wallet",
+          type: "deposit",
+          asset: "BTC",
+          amount: (output.value / 100000000).toString(),
+          timestamp: new Date(tx.time * 1000).toISOString(),
+          from_address: getFirstSenderAddressVercel(tx.inputs),
+          to_address: address,
+          tx_id: tx.hash,
+          status: "Completed",
+          network: "BTC",
+          api_source: "Blockchain_Info"
+        });
+      }
+      
+      if (isWithdrawal) {
+        const input = tx.inputs.find(i => i.prev_out && i.prev_out.addr === address);
+        transactions.push({
+          platform: "Bitcoin Wallet",
+          type: "withdrawal",
+          asset: "BTC",
+          amount: (input.prev_out.value / 100000000).toString(),
+          timestamp: new Date(tx.time * 1000).toISOString(),
+          from_address: address,
+          to_address: getFirstReceiverAddressVercel(tx.out, address),
+          tx_id: tx.hash,
+          status: "Completed",
+          network: "BTC",
+          api_source: "Blockchain_Info"
+        });
+      }
+    });
+    
+    return transactions;
+    
+  } catch (error) {
+    console.error("Error fetching Bitcoin transactions:", error);
+    throw error;
+  }
 }
 
 async function fetchBitcoinTransactionsVercel(address) {
