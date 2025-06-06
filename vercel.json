@@ -1,7 +1,3 @@
 {
-  "functions": {
-    "api/crypto-to-sheets.js": {
-      "regions": ["sin1", "hnd1"]
-    }
-  }
+  "regions": ["sin1"]
 }
