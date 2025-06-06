@@ -860,7 +860,8 @@ async function fetchSolanaEnhanced(address, filterDate) {
 }
 
 // ===========================================
-// GOOGLE SHEETS FUNCTIONS (SAME AS BEFORE)
+// MODIFY ONLY THIS SECTION in writeToGoogleSheetsWithStatus function
+// Find this section around line 550 and replace it:
 // ===========================================
 
 async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
@@ -888,14 +889,18 @@ async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
     const sheets = google.sheets({ version: 'v4', auth });
     const spreadsheetId = '1pLsxrfU5NgHF4aNLXNnCCvGgBvKO4EKjb44iiVvUp5Q';
 
-    // Write transactions
-    const withdrawals = transactions.filter(tx => tx.type === 'withdrawal');
-    const deposits = transactions.filter(tx => tx.type === 'deposit');
+    // *** NEW: Apply AED value filter before processing ***
+    const filteredTransactions = filterTransactionsByValue(transactions);
+    console.log(`💰 After AED filter: ${filteredTransactions.length} transactions (min 3.6 AED)`);
+
+    // Write transactions (using filtered list)
+    const withdrawals = filteredTransactions.filter(tx => tx.type === 'withdrawal');
+    const deposits = filteredTransactions.filter(tx => tx.type === 'deposit');
 
     let withdrawalsAdded = 0;
     let depositsAdded = 0;
 
-    // Write withdrawals
+    // Write withdrawals (rest stays the same)
     if (withdrawals.length > 0) {
       const withdrawalRows = withdrawals.map(tx => [
         '', '', '', '', '', // Green columns for accountant
@@ -913,7 +918,7 @@ async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
       withdrawalsAdded = withdrawals.length;
     }
 
-    // Write deposits
+    // Write deposits (rest stays the same)
     if (deposits.length > 0) {
       const depositRows = deposits.map(tx => [
         '', '', '', '', '', // Green columns for accountant
@@ -931,14 +936,17 @@ async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
       depositsAdded = deposits.length;
     }
 
-    // Update Settings status table
+    // Update Settings status table (unchanged)
     await updateSettingsStatus(sheets, spreadsheetId, apiStatus);
 
     return {
       success: true,
       withdrawalsAdded: withdrawalsAdded,
       depositsAdded: depositsAdded,
-      statusUpdated: true
+      statusUpdated: true,
+      totalBeforeFilter: transactions.length,
+      totalAfterFilter: filteredTransactions.length,
+      filteredOut: transactions.length - filteredTransactions.length
     };
 
   } catch (error) {
@@ -1049,4 +1057,52 @@ function createQueryString(params) {
 function formatDateTimeSimple(isoString) {
   const date = new Date(isoString);
   return date.toISOString().slice(0, 16).replace('T', ' ');
+}
+// ===========================================
+// OPTION A: SAFE AED FILTER ADDITION
+// Only add 3.6 AED minimum filter - no other changes
+// ===========================================
+
+// ADD THIS FUNCTION after the existing utility functions (around line 800+)
+
+/**
+ * Filter transactions by minimum AED value (3.6 AED)
+ */
+function filterTransactionsByValue(transactions) {
+  // Current crypto prices in AED
+  const pricesAED = {
+    'BTC': 220200,
+    'ETH': 11010,
+    'USDT': 3.67,
+    'USDC': 3.67,
+    'SOL': 181.50,
+    'TRX': 0.37,
+    'BNB': 2200,
+    'SEI': 1.47,
+    'BUSD': 3.67
+  };
+
+  const minValueAED = 3.6;
+  let filteredCount = 0;
+  let totalCount = transactions.length;
+
+  const filtered = transactions.filter(tx => {
+    // Calculate AED value
+    const amount = parseFloat(tx.amount) || 0;
+    const priceAED = pricesAED[tx.asset] || 0;
+    const aedValue = amount * priceAED;
+    
+    // Keep transactions >= 3.6 AED
+    const keepTransaction = aedValue >= minValueAED;
+    
+    if (!keepTransaction) {
+      filteredCount++;
+    }
+    
+    return keepTransaction;
+  });
+
+  console.log(`💰 Value Filter: ${totalCount} → ${filtered.length} transactions (removed ${filteredCount} < 3.6 AED)`);
+  
+  return filtered;
 }
