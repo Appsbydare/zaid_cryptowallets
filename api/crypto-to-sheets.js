@@ -1,7 +1,7 @@
 // ===========================================
-// COMPLETE ENHANCED CRYPTO API WITH FULL DEBUGGING
+// COMPLETE ENHANCED CRYPTO API WITH CURRENCY & RECYCLEBIN MODIFICATIONS
 // Replace your entire api/crypto-to-sheets.js with this file
-// Features: Enhanced debugging, ByBit V5 fix, P2P/Pay debugging, Multiple Bitcoin APIs
+// Features: Enhanced debugging, ByBit V5 fix, P2P/Pay debugging, Multiple Bitcoin APIs, Currency handling, RecycleBin
 // ===========================================
 
 import { GoogleAuth } from 'google-auth-library';
@@ -214,7 +214,7 @@ export default async function handler(req, res) {
     }
 
     // ===========================================
-    // STEP 4: WRITE TO GOOGLE SHEETS WITH ENHANCED DEDUPLICATION
+    // STEP 4: WRITE TO GOOGLE SHEETS WITH ENHANCED DEDUPLICATION & RECYCLEBIN
     // ===========================================
     console.log(`🔥 Processing ${allTransactions.length} ENHANCED transactions with SAFE deduplication...`);
     console.log(`📊 Total found: ${totalTransactionsFound}, Raw collected: ${allTransactions.length}`);
@@ -249,7 +249,7 @@ export default async function handler(req, res) {
     // ===========================================
     res.status(200).json({
       success: true,
-      message: 'COMPLETE ENHANCED data processing with FULL DEBUGGING completed',
+      message: 'COMPLETE ENHANCED data processing with CURRENCY HANDLING & RECYCLEBIN completed',
       transactions: allTransactions.length,
       totalFound: totalTransactionsFound,
       dateFilter: startDate,
@@ -261,6 +261,8 @@ export default async function handler(req, res) {
         afterValueFilter: sheetsResult.totalAfterFilter || 0,
         duplicatesRemoved: sheetsResult.duplicatesRemoved || 0,
         valueFiltered: sheetsResult.filteredOut || 0,
+        recycleBinSaved: sheetsResult.recycleBinSaved || 0,
+        unknownCurrencies: sheetsResult.unknownCurrencies || [],
         finalAdded: (sheetsResult.withdrawalsAdded || 0) + (sheetsResult.depositsAdded || 0)
       },
       summary: {
@@ -268,7 +270,7 @@ export default async function handler(req, res) {
         blockchainWallets: Object.keys(apiStatusResults).filter(k => k.includes('Wallet')).length,
         activeAPIs: Object.values(apiStatusResults).filter(s => s.status === 'Active').length,
         errorAPIs: Object.values(apiStatusResults).filter(s => s.status === 'Error').length,
-        enhancedFeatures: 'Full Debugging + P2P/Pay + ByBit V5 + Multi Bitcoin APIs'
+        enhancedFeatures: 'Full Debugging + P2P/Pay + ByBit V5 + Multi Bitcoin APIs + Currency Handling + RecycleBin'
       },
       timestamp: new Date().toISOString()
     });
@@ -1411,7 +1413,7 @@ async function fetchSolanaEnhanced(address, filterDate) {
 }
 
 // ===========================================
-// SAFE DEDUPLICATION AND FILTERING FUNCTIONS (UNCHANGED)
+// ENHANCED DEDUPLICATION AND FILTERING FUNCTIONS WITH CURRENCY & RECYCLEBIN
 // ===========================================
 
 async function getExistingTransactionIds(sheets, spreadsheetId) {
@@ -1491,6 +1493,7 @@ function removeDuplicateTransactions(transactions, existingTxIds) {
   return newTransactions;
 }
 
+// MODIFIED: Accept all currencies with 1 AED default + track unknowns
 function filterTransactionsByValue(transactions) {
   const pricesAED = {
     'BTC': 220200,
@@ -1501,30 +1504,72 @@ function filterTransactionsByValue(transactions) {
     'TRX': 0.37,
     'BNB': 2200,
     'SEI': 1.47,
-    'BUSD': 3.67
+    'BUSD': 3.67,
+    'ADA': 1.47,  // Added ADA
+    'DOT': 18.50,
+    'MATIC': 1.84,
+    'LINK': 44.10,
+    'UNI': 25.75,
+    'LTC': 257.25,
+    'XRP': 2.20,
+    'AVAX': 117.00,
+    'ATOM': 29.50,
+    'NEAR': 22.00,
+    'FTM': 2.94,
+    'ALGO': 1.10,
+    'VET': 0.11,
+    'ICP': 36.75,
+    'SAND': 1.84,
+    'MANA': 1.47,
+    'CRO': 0.44,
+    'SHIB': 0.00009
   };
 
   const minValueAED = 3.6;
   let filteredCount = 0;
   let totalCount = transactions.length;
+  const filteredTransactions = []; // NEW: Track filtered transactions for RecycleBin
+  const unknownCurrencies = new Set(); // NEW: Track unknown currencies
 
-  const filtered = transactions.filter(tx => {
+  const keepTransactions = transactions.filter(tx => {
     const amount = parseFloat(tx.amount) || 0;
-    const priceAED = pricesAED[tx.asset] || 0;
-    const aedValue = amount * priceAED;
+    let priceAED = pricesAED[tx.asset];
     
+    // NEW: Use 1 AED default for unknown currencies
+    if (!priceAED) {
+      priceAED = 1.0; // Default 1 AED for unknown currencies
+      unknownCurrencies.add(tx.asset);
+      console.log(`⚠️ Unknown currency ${tx.asset} - using 1 AED default`);
+    }
+    
+    const aedValue = amount * priceAED;
     const keepTransaction = aedValue >= minValueAED;
     
     if (!keepTransaction) {
       filteredCount++;
+      // NEW: Add to filtered list for RecycleBin
+      filteredTransactions.push({
+        ...tx,
+        calculated_aed_value: aedValue,
+        used_default_rate: !pricesAED[tx.asset],
+        filter_reason: `Value ${aedValue.toFixed(2)} AED < ${minValueAED} AED minimum`
+      });
     }
     
     return keepTransaction;
   });
 
-  console.log(`💰 Value Filter: ${totalCount} → ${filtered.length} transactions (removed ${filteredCount} < 3.6 AED)`);
+  console.log(`💰 Value Filter: ${totalCount} → ${keepTransactions.length} transactions (removed ${filteredCount} < 3.6 AED)`);
+  if (unknownCurrencies.size > 0) {
+    console.log(`⚠️ Unknown currencies using 1 AED default: ${Array.from(unknownCurrencies).join(', ')}`);
+  }
   
-  return filtered;
+  // NEW: Return both filtered and rejected transactions
+  return {
+    transactions: keepTransactions,
+    filteredOut: filteredTransactions,
+    unknownCurrencies: Array.from(unknownCurrencies)
+  };
 }
 
 function sortTransactionsByTimestamp(transactions) {
@@ -1545,10 +1590,129 @@ function sortTransactionsByTimestamp(transactions) {
   return sorted;
 }
 
+// NEW: Save filtered transactions to RecycleBin sheet
+async function saveToRecycleBin(sheets, spreadsheetId, filteredTransactions) {
+  if (filteredTransactions.length === 0) {
+    console.log('📁 No transactions to save to RecycleBin');
+    return 0;
+  }
+
+  try {
+    console.log(`📁 Saving ${filteredTransactions.length} filtered transactions to RecycleBin...`);
+    
+    // Check if RecycleBin sheet exists
+    try {
+      const sheetMetadata = await sheets.spreadsheets.get({
+        spreadsheetId: spreadsheetId
+      });
+      
+      const recycleBinExists = sheetMetadata.data.sheets.some(
+        sheet => sheet.properties.title === 'RecycleBin'
+      );
+      
+      if (!recycleBinExists) {
+        console.log('📁 Creating RecycleBin sheet...');
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId: spreadsheetId,
+          requestBody: {
+            requests: [{
+              addSheet: {
+                properties: {
+                  title: 'RecycleBin'
+                }
+              }
+            }]
+          }
+        });
+        
+        // Add headers
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: 'RecycleBin!A1:M1',
+          valueInputOption: 'RAW',
+          requestBody: {
+            values: [[
+              'Date & Time', 'Platform', 'Type', 'Asset', 'Amount', 
+              'Calculated AED', 'Used Default Rate', 'Filter Reason',
+              'From Address', 'To Address', 'TX ID', 'Status', 'Network'
+            ]]
+          }
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error checking/creating RecycleBin sheet:', error);
+      return 0;
+    }
+
+    // Get existing RecycleBin data to avoid duplicates
+    let existingTxIds = new Set();
+    try {
+      const existingData = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: 'RecycleBin!A2:M1000'
+      });
+      
+      if (existingData.data.values) {
+        existingData.data.values.forEach(row => {
+          if (row[10]) { // TX ID column
+            existingTxIds.add(row[10].toString().trim());
+          }
+        });
+      }
+    } catch (error) {
+      console.log('⚠️ Could not read existing RecycleBin data (might be empty)');
+    }
+
+    // Filter out duplicates
+    const newFilteredTransactions = filteredTransactions.filter(tx => {
+      const txId = tx.tx_id?.toString().trim();
+      return txId && !existingTxIds.has(txId);
+    });
+
+    if (newFilteredTransactions.length === 0) {
+      console.log('📁 All filtered transactions already exist in RecycleBin');
+      return 0;
+    }
+
+    // Prepare rows for RecycleBin
+    const recycleBinRows = newFilteredTransactions.map(tx => [
+      formatDateTimeSimple(tx.timestamp),
+      tx.platform,
+      tx.type,
+      tx.asset,
+      parseFloat(tx.amount).toFixed(8),
+      tx.calculated_aed_value?.toFixed(2) || '0.00',
+      tx.used_default_rate ? 'YES' : 'NO',
+      tx.filter_reason || 'Unknown',
+      tx.from_address || '',
+      tx.to_address || '',
+      tx.tx_id || '',
+      tx.status || 'Unknown',
+      tx.network || ''
+    ]);
+
+    // Append to RecycleBin
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: 'RecycleBin!A:M',
+      valueInputOption: 'RAW',
+      requestBody: { values: recycleBinRows }
+    });
+
+    console.log(`✅ Saved ${newFilteredTransactions.length} new transactions to RecycleBin`);
+    return newFilteredTransactions.length;
+
+  } catch (error) {
+    console.error('❌ Error saving to RecycleBin:', error);
+    return 0;
+  }
+}
+
 // ===========================================
-// ENHANCED GOOGLE SHEETS FUNCTIONS (UNCHANGED)
+// ENHANCED GOOGLE SHEETS FUNCTIONS WITH CURRENCY & RECYCLEBIN
 // ===========================================
 
+// MODIFIED: Update main Google Sheets function to handle new filtering and RecycleBin
 async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
   try {
     console.log('🔑 Setting up Google Sheets authentication...');
@@ -1578,11 +1742,23 @@ async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
 
     const existingTxIds = await getExistingTransactionIds(sheets, spreadsheetId);
     const uniqueTransactions = removeDuplicateTransactions(transactions, existingTxIds);
-    const filteredTransactions = filterTransactionsByValue(uniqueTransactions);
+    
+    // MODIFIED: Use new filtering function that returns both kept and filtered
+    const filterResult = filterTransactionsByValue(uniqueTransactions);
+    const filteredTransactions = filterResult.transactions;
+    const rejectedTransactions = filterResult.filteredOut;
+    const unknownCurrencies = filterResult.unknownCurrencies;
+    
     const sortedTransactions = sortTransactionsByTimestamp(filteredTransactions);
 
     console.log(`🎯 Final result: ${transactions.length} → ${sortedTransactions.length} NEW transactions to append`);
     console.log(`🛡️ SAFETY: Existing data will NOT be touched - only appending new transactions`);
+
+    // NEW: Save rejected transactions to RecycleBin
+    let recycleBinSaved = 0;
+    if (rejectedTransactions.length > 0) {
+      recycleBinSaved = await saveToRecycleBin(sheets, spreadsheetId, rejectedTransactions);
+    }
 
     if (sortedTransactions.length === 0) {
       console.log('ℹ️ No new transactions to append after deduplication and filtering');
@@ -1597,7 +1773,9 @@ async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
         totalAfterDedup: uniqueTransactions.length,
         totalAfterFilter: filteredTransactions.length,
         duplicatesRemoved: transactions.length - uniqueTransactions.length,
-        filteredOut: uniqueTransactions.length - filteredTransactions.length
+        filteredOut: uniqueTransactions.length - filteredTransactions.length,
+        recycleBinSaved: recycleBinSaved, // NEW
+        unknownCurrencies: unknownCurrencies // NEW
       };
     }
 
@@ -1659,11 +1837,16 @@ async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
       totalAfterFilter: filteredTransactions.length,
       duplicatesRemoved: transactions.length - uniqueTransactions.length,
       filteredOut: uniqueTransactions.length - filteredTransactions.length,
+      recycleBinSaved: recycleBinSaved, // NEW
+      unknownCurrencies: unknownCurrencies, // NEW
       safetyNote: "Only appended new transactions - existing data untouched"
     };
 
     console.log('🎉 SAFE enhanced deduplication completed:', result);
     console.log('🛡️ GUARANTEE: No existing accountant data was modified');
+    if (unknownCurrencies.length > 0) {
+      console.log('⚠️ UNKNOWN CURRENCIES using 1 AED default:', unknownCurrencies.join(', '));
+    }
     return result;
 
   } catch (error) {
