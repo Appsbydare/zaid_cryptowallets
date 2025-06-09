@@ -356,26 +356,48 @@ async function testBinanceAccountEnhanced(account, filterDate) {
       };
     }
 
-    // Get ENHANCED transactions with higher limits
+    // Get ALL transaction types with higher limits
     let transactions = [];
     let totalFetched = 0;
+    let transactionBreakdown = {
+      deposits: 0,
+      withdrawals: 0,
+      p2p: 0,
+      pay: 0
+    };
     
     try {
-      // Fetch deposits with limit 100
+      // 1. Fetch regular deposits
       const deposits = await fetchBinanceDepositsEnhanced(account, filterDate);
       transactions.push(...deposits);
-      totalFetched += deposits.length;
+      transactionBreakdown.deposits = deposits.length;
       console.log(`  💰 ${account.name} deposits: ${deposits.length}`);
 
-      // Fetch withdrawals with limit 100
+      // 2. Fetch regular withdrawals
       const withdrawals = await fetchBinanceWithdrawalsEnhanced(account, filterDate);
       transactions.push(...withdrawals);
-      totalFetched += withdrawals.length;
+      transactionBreakdown.withdrawals = withdrawals.length;
       console.log(`  📤 ${account.name} withdrawals: ${withdrawals.length}`);
+
+      // 3. Fetch P2P transactions (NEW!)
+      const p2pTransactions = await fetchBinanceP2PEnhanced(account, filterDate);
+      transactions.push(...p2pTransactions);
+      transactionBreakdown.p2p = p2pTransactions.length;
+      console.log(`  🤝 ${account.name} P2P: ${p2pTransactions.length}`);
+
+      // 4. Fetch Binance Pay transactions (NEW!)
+      const payTransactions = await fetchBinancePayEnhanced(account, filterDate);
+      transactions.push(...payTransactions);
+      transactionBreakdown.pay = payTransactions.length;
+      console.log(`  💳 ${account.name} Pay: ${payTransactions.length}`);
+
+      totalFetched = transactions.length;
 
     } catch (txError) {
       console.log(`Transaction fetch failed for ${account.name}:`, txError.message);
     }
+
+    const statusNotes = `🔥 Connected: ${transactionBreakdown.deposits}D + ${transactionBreakdown.withdrawals}W + ${transactionBreakdown.p2p}P2P + ${transactionBreakdown.pay}Pay = ${totalFetched} total`;
 
     return {
       success: true,
@@ -384,7 +406,7 @@ async function testBinanceAccountEnhanced(account, filterDate) {
         status: 'Active',
         lastSync: new Date().toISOString(),
         autoUpdate: 'Every Hour',
-        notes: `🔥 Connected, ${transactions.length} transactions (enhanced limits)`,
+        notes: statusNotes,
         transactionCount: transactions.length
       }
     };
@@ -403,7 +425,6 @@ async function testBinanceAccountEnhanced(account, filterDate) {
     };
   }
 }
-
 async function fetchBinanceDepositsEnhanced(account, filterDate) {
   try {
     const timestamp = Date.now();
@@ -520,62 +541,250 @@ async function fetchBinanceWithdrawalsEnhanced(account, filterDate) {
   }
 }
 
-async function testByBitAccountEnhanced(config, filterDate) {
+// ===========================================
+// NEW: BINANCE P2P TRANSACTION FETCHING
+// ===========================================
+
+async function fetchBinanceP2PEnhanced(account, filterDate) {
+  const transactions = [];
+  
+  try {
+    console.log(`    🤝 Fetching P2P transactions for ${account.name}...`);
+    
+    // Fetch P2P Buy orders (deposits)
+    const buyOrders = await fetchBinanceP2POrders(account, filterDate, 'BUY');
+    transactions.push(...buyOrders);
+    
+    // Fetch P2P Sell orders (withdrawals)  
+    const sellOrders = await fetchBinanceP2POrders(account, filterDate, 'SELL');
+    transactions.push(...sellOrders);
+    
+    console.log(`    ✅ P2P: ${buyOrders.length} buys + ${sellOrders.length} sells`);
+    
+  } catch (error) {
+    console.log(`    ❌ P2P fetch failed for ${account.name}: ${error.message}`);
+  }
+  
+  return transactions;
+}
+
+async function fetchBinanceP2POrders(account, filterDate, tradeType) {
   try {
     const timestamp = Date.now();
-    
-    // Try different endpoints for better compatibility
-    const endpoints = [
-      "https://api.bybit.com/v5/account/wallet-balance",
-      "https://api.bybit.com/v5/user/query-api"
-    ];
+    const endpoint = "https://api.binance.com/sapi/v1/c2c/orderMatch/listUserOrderHistory";
+    const params = {
+      tradeType: tradeType, // 'BUY' or 'SELL'
+      timestamp: timestamp,
+      recvWindow: 5000,
+      page: 1,
+      rows: 100 // Get up to 100 P2P orders
+    };
 
-    for (const endpoint of endpoints) {
-      try {
-        const params = {
-          accountType: "UNIFIED",
-          timestamp: timestamp.toString()
-        };
+    const signature = createBinanceSignature(params, account.apiSecret);
+    const queryString = createQueryString(params);
+    const url = `${endpoint}?${queryString}&signature=${signature}`;
 
-        const signature = createByBitSignature(params, config.apiSecret);
-        const queryString = createQueryString(params);
-        const url = `${endpoint}?${queryString}`;
-
-        const response = await fetch(url, {
-          method: "GET",
-          headers: {
-            "X-BAPI-API-KEY": config.apiKey,
-            "X-BAPI-SIGN": signature,
-            "X-BAPI-TIMESTAMP": timestamp.toString(),
-            "X-BAPI-RECV-WINDOW": "5000"
-          }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          
-          if (data.retCode === 0) {
-            return {
-              success: true,
-              transactions: [], // Would implement actual transaction fetching
-              status: {
-                status: 'Active',
-                lastSync: new Date().toISOString(),
-                autoUpdate: 'Every Hour',
-                notes: `🔥 Connected successfully (endpoint: ${endpoint.split('/').pop()})`,
-                transactionCount: 0
-              }
-            };
-          }
-        }
-        
-      } catch (endpointError) {
-        console.log(`ByBit endpoint ${endpoint} failed:`, endpointError.message);
-        continue;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "X-MBX-APIKEY": account.apiKey,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
       }
+    });
+
+    if (!response.ok) {
+      throw new Error(`P2P API error: ${response.status}`);
     }
 
-    throw new Error("All ByBit endpoints failed");
+    const data = await response.json();
+
+    if (data.code && data.code !== 200) {
+      throw new Error(`Binance P2P error: ${data.msg}`);
+    }
+
+    if (!data.data) {
+      return [];
+    }
+
+    // Filter by date and convert to standard format
+    const p2pTransactions = data.data.filter(order => {
+      const orderDate = new Date(parseInt(order.createTime));
+      return orderDate >= filterDate && order.orderStatus === "COMPLETED";
+    }).map(order => ({
+      platform: account.name,
+      type: tradeType === 'BUY' ? "deposit" : "withdrawal",
+      asset: order.asset,
+      amount: order.amount.toString(),
+      timestamp: new Date(parseInt(order.createTime)).toISOString(),
+      from_address: tradeType === 'BUY' ? "P2P User" : account.name,
+      to_address: tradeType === 'BUY' ? account.name : "P2P User",
+      tx_id: `P2P_${order.orderNumber}`,
+      status: "Completed",
+      network: "P2P",
+      api_source: `Binance_P2P_${tradeType}`
+    }));
+
+    return p2pTransactions;
+
+  } catch (error) {
+    console.error(`Error fetching P2P ${tradeType} orders for ${account.name}:`, error);
+    return [];
+  }
+}
+
+// ===========================================
+// NEW: BINANCE PAY TRANSACTION FETCHING  
+// ===========================================
+
+async function fetchBinancePayEnhanced(account, filterDate) {
+  try {
+    console.log(`    💳 Fetching Binance Pay transactions for ${account.name}...`);
+    
+    const timestamp = Date.now();
+    const endpoint = "https://api.binance.com/sapi/v1/pay/transactions";
+    const params = {
+      timestamp: timestamp,
+      recvWindow: 5000,
+      limit: 100,
+      startTime: filterDate.getTime()
+    };
+
+    const signature = createBinanceSignature(params, account.apiSecret);
+    const queryString = createQueryString(params);
+    const url = `${endpoint}?${queryString}&signature=${signature}`;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "X-MBX-APIKEY": account.apiKey,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Binance Pay API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.code && data.code !== 200) {
+      throw new Error(`Binance Pay error: ${data.msg}`);
+    }
+
+    if (!data.data) {
+      return [];
+    }
+
+    const payTransactions = data.data.filter(tx => {
+      const txDate = new Date(parseInt(tx.createTime));
+      return txDate >= filterDate && tx.status === "SUCCESS";
+    }).map(tx => {
+      const isDeposit = tx.direction === "IN";
+      
+      return {
+        platform: account.name,
+        type: isDeposit ? "deposit" : "withdrawal",
+        asset: tx.currency,
+        amount: tx.amount.toString(),
+        timestamp: new Date(parseInt(tx.createTime)).toISOString(),
+        from_address: isDeposit ? "Binance Pay User" : account.name,
+        to_address: isDeposit ? account.name : "Binance Pay User",
+        tx_id: `PAY_${tx.transactionId}`,
+        status: "Completed",
+        network: "Binance Pay",
+        api_source: "Binance_Pay"
+      };
+    });
+
+    console.log(`    ✅ Binance Pay: ${payTransactions.length} transactions`);
+    return payTransactions;
+
+  } catch (error) {
+    console.error(`Error fetching Binance Pay for ${account.name}:`, error);
+    return [];
+  }
+}
+
+// ===========================================
+// ENHANCED BYBIT WITH ACTUAL TRANSACTION FETCHING
+// Replace the existing testByBitAccountEnhanced function
+// ===========================================
+
+async function testByBitAccountEnhanced(config, filterDate) {
+  try {
+    console.log(`🔥 Processing ByBit ${config.name} with ACTUAL transaction fetching...`);
+    
+    // Test connection first
+    const timestamp = Date.now();
+    const testEndpoint = "https://api.bybit.com/v5/account/wallet-balance";
+    const testParams = {
+      accountType: "UNIFIED",
+      timestamp: timestamp.toString()
+    };
+
+    const testSignature = createByBitSignature(testParams, config.apiSecret);
+    const testQueryString = createQueryString(testParams);
+    const testUrl = `${testEndpoint}?${testQueryString}`;
+
+    const testResponse = await fetch(testUrl, {
+      method: "GET",
+      headers: {
+        "X-BAPI-API-KEY": config.apiKey,
+        "X-BAPI-SIGN": testSignature,
+        "X-BAPI-TIMESTAMP": timestamp.toString(),
+        "X-BAPI-RECV-WINDOW": "5000"
+      }
+    });
+
+    if (!testResponse.ok) {
+      throw new Error(`ByBit connection test failed: ${testResponse.status}`);
+    }
+
+    const testData = await testResponse.json();
+    
+    if (testData.retCode !== 0) {
+      throw new Error(`ByBit test error: ${testData.retMsg}`);
+    }
+
+    console.log(`    ✅ ByBit connection successful, fetching transactions...`);
+
+    // Now fetch actual transactions
+    let transactions = [];
+    let transactionBreakdown = {
+      deposits: 0,
+      withdrawals: 0
+    };
+
+    try {
+      // Fetch deposits
+      const deposits = await fetchByBitDepositsEnhanced(config, filterDate);
+      transactions.push(...deposits);
+      transactionBreakdown.deposits = deposits.length;
+      console.log(`  💰 ${config.name} deposits: ${deposits.length}`);
+
+      // Fetch withdrawals
+      const withdrawals = await fetchByBitWithdrawalsEnhanced(config, filterDate);
+      transactions.push(...withdrawals);
+      transactionBreakdown.withdrawals = withdrawals.length;
+      console.log(`  📤 ${config.name} withdrawals: ${withdrawals.length}`);
+
+    } catch (txError) {
+      console.log(`ByBit transaction fetch failed: ${txError.message}`);
+    }
+
+    const statusNotes = `🔥 Connected: ${transactionBreakdown.deposits}D + ${transactionBreakdown.withdrawals}W = ${transactions.length} total`;
+
+    return {
+      success: true,
+      transactions: transactions,
+      status: {
+        status: 'Active',
+        lastSync: new Date().toISOString(),
+        autoUpdate: 'Every Hour',
+        notes: statusNotes,
+        transactionCount: transactions.length
+      }
+    };
 
   } catch (error) {
     return {
@@ -585,10 +794,150 @@ async function testByBitAccountEnhanced(config, filterDate) {
         status: 'Error',
         lastSync: new Date().toISOString(),
         autoUpdate: 'Every Hour',
-        notes: `❌ Enhanced test failed: ${error.message}`,
+        notes: `❌ Enhanced ByBit failed: ${error.message}`,
         transactionCount: 0
       }
     };
+  }
+}
+
+// ===========================================
+// NEW: BYBIT DEPOSIT FETCHING
+// ===========================================
+
+async function fetchByBitDepositsEnhanced(config, filterDate) {
+  try {
+    console.log(`    💰 Fetching ByBit deposits for ${config.name}...`);
+    
+    const timestamp = Date.now();
+    const endpoint = "https://api.bybit.com/v5/asset/deposit/query-record";
+    const params = {
+      timestamp: timestamp.toString(),
+      limit: "50", // Get up to 50 deposits
+      startTime: filterDate.getTime().toString()
+    };
+
+    const signature = createByBitSignature(params, config.apiSecret);
+    const queryString = createQueryString(params);
+    const url = `${endpoint}?${queryString}`;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "X-BAPI-API-KEY": config.apiKey,
+        "X-BAPI-SIGN": signature,
+        "X-BAPI-TIMESTAMP": timestamp.toString(),
+        "X-BAPI-RECV-WINDOW": "5000"
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`ByBit deposits API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    if (data.retCode !== 0) {
+      throw new Error(`ByBit deposits error: ${data.retMsg}`);
+    }
+
+    if (!data.result || !data.result.rows) {
+      return [];
+    }
+
+    const deposits = data.result.rows.filter(deposit => {
+      const depositDate = new Date(parseInt(deposit.successAt));
+      return depositDate >= filterDate && deposit.status === "3"; // Status 3 = success
+    }).map(deposit => ({
+      platform: config.name,
+      type: "deposit",
+      asset: deposit.coin,
+      amount: deposit.amount.toString(),
+      timestamp: new Date(parseInt(deposit.successAt)).toISOString(),
+      from_address: deposit.toAddress || "External",
+      to_address: config.name,
+      tx_id: deposit.txID || deposit.id,
+      status: "Completed",
+      network: deposit.chain,
+      api_source: "ByBit_Deposit"
+    }));
+
+    console.log(`    ✅ ByBit deposits: ${deposits.length} transactions`);
+    return deposits;
+
+  } catch (error) {
+    console.error(`Error fetching ByBit deposits for ${config.name}:`, error);
+    return [];
+  }
+}
+
+// ===========================================
+// NEW: BYBIT WITHDRAWAL FETCHING
+// ===========================================
+
+async function fetchByBitWithdrawalsEnhanced(config, filterDate) {
+  try {
+    console.log(`    📤 Fetching ByBit withdrawals for ${config.name}...`);
+    
+    const timestamp = Date.now();
+    const endpoint = "https://api.bybit.com/v5/asset/withdraw/query-record";
+    const params = {
+      timestamp: timestamp.toString(),
+      limit: "50", // Get up to 50 withdrawals
+      startTime: filterDate.getTime().toString()
+    };
+
+    const signature = createByBitSignature(params, config.apiSecret);
+    const queryString = createQueryString(params);
+    const url = `${endpoint}?${queryString}`;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "X-BAPI-API-KEY": config.apiKey,
+        "X-BAPI-SIGN": signature,
+        "X-BAPI-TIMESTAMP": timestamp.toString(),
+        "X-BAPI-RECV-WINDOW": "5000"
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`ByBit withdrawals API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    if (data.retCode !== 0) {
+      throw new Error(`ByBit withdrawals error: ${data.retMsg}`);
+    }
+
+    if (!data.result || !data.result.rows) {
+      return [];
+    }
+
+    const withdrawals = data.result.rows.filter(withdrawal => {
+      const withdrawalDate = new Date(parseInt(withdrawal.createTime));
+      return withdrawalDate >= filterDate && withdrawal.status === "success";
+    }).map(withdrawal => ({
+      platform: config.name,
+      type: "withdrawal", 
+      asset: withdrawal.coin,
+      amount: withdrawal.amount.toString(),
+      timestamp: new Date(parseInt(withdrawal.createTime)).toISOString(),
+      from_address: config.name,
+      to_address: withdrawal.toAddress || "External",
+      tx_id: withdrawal.txID || withdrawal.id,
+      status: "Completed",
+      network: withdrawal.chain,
+      api_source: "ByBit_Withdrawal"
+    }));
+
+    console.log(`    ✅ ByBit withdrawals: ${withdrawals.length} transactions`);
+    return withdrawals;
+
+  } catch (error) {
+    console.error(`Error fetching ByBit withdrawals for ${config.name}:`, error);
+    return [];
   }
 }
 
