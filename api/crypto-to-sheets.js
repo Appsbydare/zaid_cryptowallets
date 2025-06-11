@@ -298,8 +298,7 @@ async function testBinanceAccountFixed(account, filterDate) {
       deposits: 0,
       withdrawals: 0,
       p2p: 0,
-      pay: 0,
-      fiat: 0
+      pay: 0
     };
     
     try {
@@ -327,17 +326,11 @@ async function testBinanceAccountFixed(account, filterDate) {
       transactionBreakdown.pay = payTransactions.length;
       console.log(`  💳 ${account.name} Pay: ${payTransactions.length}`);
 
-      // 5. FIXED Fiat payments
-      const fiatTransactions = await fetchBinanceFiatPayments(account, filterDate);
-      transactions.push(...fiatTransactions);
-      transactionBreakdown.fiat = fiatTransactions.length;
-      console.log(`  💱 ${account.name} Fiat: ${fiatTransactions.length}`);
-
     } catch (txError) {
       console.log(`Transaction fetch failed for ${account.name}:`, txError.message);
     }
 
-    const statusNotes = `🔧 FIXED: ${transactionBreakdown.deposits}D + ${transactionBreakdown.withdrawals}W + ${transactionBreakdown.p2p}P2P + ${transactionBreakdown.pay}Pay + ${transactionBreakdown.fiat}Fiat = ${transactions.length} total`;
+    const statusNotes = `🔧 FIXED: ${transactionBreakdown.deposits}D + ${transactionBreakdown.withdrawals}W + ${transactionBreakdown.p2p}P2P + ${transactionBreakdown.pay}Pay = ${transactions.length} total`;
     
     return {
       success: true,
@@ -492,20 +485,27 @@ async function fetchBinanceP2PFixed(account, filterDate) {
   try {
     console.log(`    🤝 Fetching P2P transactions for ${account.name} using FIXED endpoint...`);
     
-    // Process both BUY and SELL orders
-    for (const tradeType of ['BUY', 'SELL']) {
+    // FIXED: Only use the working P2P endpoint
+    const endTime = Date.now();
+    const startTime = Math.max(filterDate.getTime(), endTime - (30 * 24 * 60 * 60 * 1000));
+    
+    const tradeTypes = ['BUY', 'SELL'];
+    
+    for (const tradeType of tradeTypes) {
       try {
         console.log(`      🔧 Fetching P2P ${tradeType} orders...`);
         
         const timestamp = Date.now();
         const endpoint = "https://api.binance.com/sapi/v1/c2c/orderMatch/listUserOrderHistory";
+        
         const params = {
           tradeType: tradeType,
+          startTimestamp: startTime,
+          endTimestamp: endTime,
+          page: 1,
+          rows: 50, // FIXED: Reduced to safe limit
           timestamp: timestamp,
-          recvWindow: 5000,
-          limit: 100,
-          startTime: filterDate.getTime(),
-          endTime: Date.now()
+          recvWindow: 5000
         };
 
         const signature = createBinanceSignature(params, account.apiSecret);
@@ -520,22 +520,18 @@ async function fetchBinanceP2PFixed(account, filterDate) {
           }
         });
 
-        const responseText = await response.text();
-        let data;
-        try {
-          data = JSON.parse(responseText);
-        } catch (e) {
-          console.log(`        ❌ P2P ${tradeType} API Error: Invalid JSON response - ${responseText}`);
-          continue;
-        }
-
         if (!response.ok) {
-          console.log(`        ❌ P2P ${tradeType} API Error: ${response.status} - ${data.msg || responseText}`);
-          continue;
+          if (response.status === 451) {
+            console.log(`        🚫 P2P API geo-blocked for ${account.name}`);
+            break;
+          }
+          throw new Error(`P2P API error: ${response.status}`);
         }
 
-        if (data.code && data.code !== "000000") {
-          console.log(`        ❌ P2P ${tradeType} API Error: ${data.msg || data.message}`);
+        const data = await response.json();
+
+        if (data.code && data.code !== 200) {
+          console.log(`        ❌ P2P ${tradeType} API Error: ${data.msg}`);
           continue;
         }
 
@@ -578,104 +574,6 @@ async function fetchBinanceP2PFixed(account, filterDate) {
     
   } catch (error) {
     console.log(`    ❌ P2P fetch failed for ${account.name}: ${error.message}`);
-  }
-  
-  return transactions;
-}
-
-async function fetchBinanceFiatPayments(account, filterDate) {
-  const transactions = [];
-  
-  try {
-    console.log(`    💳 Fetching Fiat payments for ${account.name}...`);
-    
-    // Process both BUY and SELL transactions
-    for (const transactionType of ['0', '1']) {
-      try {
-        console.log(`      🔧 Fetching Fiat ${transactionType === '0' ? 'BUY' : 'SELL'} orders...`);
-        
-        const timestamp = Date.now();
-        const endpoint = "https://api.binance.com/sapi/v1/fiat/payments";
-        const params = {
-          transactionType: transactionType,
-          timestamp: timestamp,
-          recvWindow: 5000,
-          page: 1,
-          rows: 100,
-          beginTime: filterDate.getTime(),
-          endTime: Date.now()
-        };
-
-        const signature = createBinanceSignature(params, account.apiSecret);
-        const queryString = createQueryString(params);
-        const url = `${endpoint}?${queryString}&signature=${signature}`;
-
-        const response = await fetch(url, {
-          method: "GET",
-          headers: {
-            "X-MBX-APIKEY": account.apiKey,
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-          }
-        });
-
-        const responseText = await response.text();
-        let data;
-        try {
-          data = JSON.parse(responseText);
-        } catch (e) {
-          console.log(`        ❌ Fiat ${transactionType} API Error: Invalid JSON response - ${responseText}`);
-          continue;
-        }
-
-        if (!response.ok) {
-          console.log(`        ❌ Fiat ${transactionType} API Error: ${response.status} - ${data.msg || responseText}`);
-          continue;
-        }
-
-        if (!data.success) {
-          console.log(`        ❌ Fiat ${transactionType} API Error: ${data.message}`);
-          continue;
-        }
-
-        if (!data.data) {
-          console.log(`        ℹ️ Fiat ${transactionType}: No data found`);
-          continue;
-        }
-
-        const orders = data.data;
-        console.log(`        📊 Fiat ${transactionType} Orders: ${orders.length}`);
-
-        const pageTransactions = orders.filter(order => {
-          if (!order.createTime) return false;
-          
-          const orderDate = new Date(parseInt(order.createTime));
-          const isCompleted = order.status === "Completed";
-          
-          return orderDate >= filterDate && isCompleted;
-        }).map(order => ({
-          platform: account.name,
-          type: transactionType === '0' ? "deposit" : "withdrawal",
-          asset: order.cryptoCurrency,
-          amount: order.obtainAmount.toString(),
-          timestamp: new Date(parseInt(order.createTime)).toISOString(),
-          from_address: transactionType === '0' ? "Fiat Payment" : account.name,
-          to_address: transactionType === '0' ? account.name : "Fiat Payment",
-          tx_id: `FIAT_${order.orderNo}`,
-          status: "Completed",
-          network: "Fiat",
-          api_source: "Binance_Fiat_Fixed"
-        }));
-
-        transactions.push(...pageTransactions);
-        console.log(`        ✅ Fiat ${transactionType}: Added ${pageTransactions.length} transactions`);
-
-      } catch (transactionTypeError) {
-        console.log(`      ❌ Fiat ${transactionType} failed: ${transactionTypeError.message}`);
-      }
-    }
-    
-  } catch (error) {
-    console.log(`    ❌ Fiat payments fetch failed for ${account.name}: ${error.message}`);
   }
   
   return transactions;
