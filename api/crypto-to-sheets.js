@@ -1263,7 +1263,7 @@ async function getExistingTransactionIds(sheets, spreadsheetId) {
       
       const withdrawalsData = withdrawalsResponse.data.values || [];
       withdrawalsData.forEach(row => {
-        if (row[6]) { // FIXED: Column index for TX ID
+        if (row[6]) { // FIXED: Column L is index 6 in F:L range (F=0, G=1, H=2, I=3, J=4, K=5, L=6)
           existingTxIds.add(row[6].toString().trim());
         }
       });
@@ -1281,7 +1281,7 @@ async function getExistingTransactionIds(sheets, spreadsheetId) {
       
       const depositsData = depositsResponse.data.values || [];
       depositsData.forEach(row => {
-        if (row[6]) { // FIXED: Column index for TX ID
+        if (row[6]) { // FIXED: Column L is index 6 in F:L range
           existingTxIds.add(row[6].toString().trim());
         }
       });
@@ -1614,9 +1614,9 @@ async function writeToGoogleSheetsFixed(transactions, apiStatus) {
     let withdrawalsAdded = 0;
     let depositsAdded = 0;
 
-    // FIXED: Write to columns F:L instead of A:L
+    // FIXED: Write to columns F:L using exact range targeting
     if (sortedWithdrawals.length > 0) {
-      console.log(`📤 APPENDING ${sortedWithdrawals.length} new withdrawals to columns F:L...`);
+      console.log(`📤 WRITING ${sortedWithdrawals.length} new withdrawals to columns F:L...`);
       
       const withdrawalRows = sortedWithdrawals.map(tx => [
         tx.platform, // F
@@ -1628,19 +1628,27 @@ async function writeToGoogleSheetsFixed(transactions, apiStatus) {
         tx.tx_id // L
       ]);
 
-      await sheets.spreadsheets.values.append({
+      // Find next empty row in column F (never before row 7)
+      const lastRowResponse = await sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: 'Withdrawals!F:L', // FIXED: Target F:L columns
+        range: 'Withdrawals!F:F'
+      });
+      const nextRow = Math.max(7, (lastRowResponse.data.values?.length || 6) + 1); // Ensure minimum row 7
+      const endRow = nextRow + withdrawalRows.length - 1;
+
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `Withdrawals!F${nextRow}:L${endRow}`, // FIXED: Exact F:L range
         valueInputOption: 'RAW',
         requestBody: { values: withdrawalRows }
       });
       
       withdrawalsAdded = sortedWithdrawals.length;
-      console.log(`✅ APPENDED ${withdrawalsAdded} withdrawals to F:L columns`);
+      console.log(`✅ WROTE ${withdrawalsAdded} withdrawals to F${nextRow}:L${endRow}`);
     }
 
     if (sortedDeposits.length > 0) {
-      console.log(`📥 APPENDING ${sortedDeposits.length} new deposits to columns F:L...`);
+      console.log(`📥 WRITING ${sortedDeposits.length} new deposits to columns F:L...`);
       
       const depositRows = sortedDeposits.map(tx => [
         tx.platform, // F
@@ -1652,15 +1660,23 @@ async function writeToGoogleSheetsFixed(transactions, apiStatus) {
         tx.tx_id // L
       ]);
 
-      await sheets.spreadsheets.values.append({
+      // Find next empty row in column F (never before row 7)
+      const lastRowResponse = await sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: 'Deposits!F:L', // FIXED: Target F:L columns
+        range: 'Deposits!F:F'
+      });
+      const nextRow = Math.max(7, (lastRowResponse.data.values?.length || 6) + 1); // Ensure minimum row 7
+      const endRow = nextRow + depositRows.length - 1;
+
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `Deposits!F${nextRow}:L${endRow}`, // FIXED: Exact F:L range
         valueInputOption: 'RAW',
         requestBody: { values: depositRows }
       });
       
       depositsAdded = sortedDeposits.length;
-      console.log(`✅ APPENDED ${depositsAdded} deposits to F:L columns`);
+      console.log(`✅ WROTE ${depositsAdded} deposits to F${nextRow}:L${endRow}`);
     }
 
     await updateSettingsStatus(sheets, spreadsheetId, apiStatus);
@@ -1677,11 +1693,11 @@ async function writeToGoogleSheetsFixed(transactions, apiStatus) {
       filteredOut: uniqueTransactions.length - filteredTransactions.length,
       recycleBinSaved: recycleBinSaved,
       unknownCurrencies: unknownCurrencies,
-      safetyNote: "Only appended new transactions to F:L columns - existing data untouched"
+              safetyNote: "Only wrote new transactions to F:L columns - existing accountant data (A:E) untouched"
     };
 
     console.log('🎉 FIXED deduplication completed:', result);
-    console.log('🛡️ GUARANTEE: No existing accountant data was modified');
+    console.log('🛡️ GUARANTEE: Columns A:E (accountant data) never touched - only F:L updated');
     if (unknownCurrencies.length > 0) {
       console.log('⚠️ UNKNOWN CURRENCIES using 1 AED default:', unknownCurrencies.join(', '));
     }
