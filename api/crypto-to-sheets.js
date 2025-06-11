@@ -547,7 +547,18 @@ async function fetchBinanceP2PFixed(account, filterDate) {
   const transactions = [];
   
   try {
-    console.log(`    🤝 Fetching P2P transactions for ${account.name} using FIXED endpoint...`);
+    console.log(`    🤝 Fetching P2P transactions for ${account.name}...`);
+    
+    // Try the enhanced method first
+    console.log(`    🔄 Using enhanced P2P method...`);
+    const enhancedTransactions = await fetchBinanceP2PEnhanced(account, filterDate);
+    if (enhancedTransactions.length > 0) {
+      console.log(`    ✅ Enhanced P2P method found ${enhancedTransactions.length} transactions`);
+      return enhancedTransactions;
+    }
+    
+    // Fall back to original method if enhanced method fails
+    console.log(`    🔄 Falling back to original P2P method...`);
     
     // Process both BUY and SELL orders
     for (const tradeType of ['BUY', 'SELL']) {
@@ -630,6 +641,148 @@ async function fetchBinanceP2PFixed(account, filterDate) {
   }
   
   return transactions;
+}
+
+// Enhanced P2P fetching function
+async function fetchBinanceP2PEnhanced(account, filterDate) {
+  try {
+    console.log(`    🤝 Fetching P2P transactions for ${account.name} using enhanced method...`);
+    
+    const baseDomain = 'https://p2p.binance.com/bapi/';
+    const transactions = [];
+    
+    // Step 1: Load available markets and currencies
+    console.log('      🔄 Loading P2P markets...');
+    const currencyResp = await fetch(baseDomain + 'fiat/v1/public/fiatpayment/menu/currency');
+    if (!currencyResp.ok) {
+      throw new Error(`Failed to load currencies: ${currencyResp.status}`);
+    }
+    
+    const currencyData = await currencyResp.json();
+    if (!currencyData.data?.currencyList) {
+      throw new Error('Invalid currency data response');
+    }
+    
+    const fiatList = currencyData.data.currencyList.map(c => c.name);
+    console.log(`      ✅ Found ${fiatList.length} fiat currencies`);
+    
+    // Step 2: Get supported assets for each fiat
+    const fiatAssets = {};
+    for (const fiat of fiatList) {
+      try {
+        const configResp = await fetch(baseDomain + 'c2c/v2/friendly/c2c/portal/config', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': '*/*',
+            'User-Agent': 'Mozilla/5.0'
+          },
+          body: JSON.stringify({ fiat: fiat })
+        });
+        
+        if (!configResp.ok) {
+          console.log(`        ⚠️ Could not load config for ${fiat}: ${configResp.status}`);
+          continue;
+        }
+        
+        const configData = await configResp.json();
+        if (configData.data?.areas) {
+          const p2pArea = configData.data.areas.find(area => area.area === 'P2P');
+          if (p2pArea?.tradeSides?.[0]?.assets) {
+            fiatAssets[fiat] = p2pArea.tradeSides[0].assets.map(a => a.asset);
+          }
+        }
+      } catch (error) {
+        console.log(`        ⚠️ Could not load assets for ${fiat}: ${error.message}`);
+      }
+    }
+    
+    // Step 3: Fetch offers for each asset/fiat pair
+    const targetAssets = ['USDT', 'BTC', 'BNB']; // Focus on main assets
+    const targetFiats = ['USD', 'EUR', 'AED']; // Focus on main fiats
+    
+    for (const asset of targetAssets) {
+      for (const fiat of targetFiats) {
+        if (!fiatAssets[fiat]?.includes(asset)) {
+          console.log(`        ℹ️ ${asset}/${fiat} not supported`);
+          continue;
+        }
+        
+        console.log(`      🔍 Fetching ${asset}/${fiat} P2P offers...`);
+        
+        // Fetch both BUY and SELL offers
+        for (const tradeType of ['BUY', 'SELL']) {
+          try {
+            const searchData = {
+              page: 1,
+              rows: 50,
+              payTypes: [],
+              countries: [],
+              asset: asset,
+              fiat: fiat,
+              tradeType: tradeType,
+              publisherType: null
+            };
+            
+            const response = await fetch(baseDomain + 'c2c/v2/friendly/c2c/adv/search', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': '*/*',
+                'User-Agent': 'Mozilla/5.0'
+              },
+              body: JSON.stringify(searchData)
+            });
+            
+            if (!response.ok) {
+              console.log(`        ❌ P2P API error for ${asset}/${fiat}: ${response.status}`);
+              continue;
+            }
+            
+            const data = await response.json();
+            
+            if (data.data && Array.isArray(data.data)) {
+              const offers = data.data.map(offer => {
+                const adv = offer.adv;
+                return {
+                  platform: account.name,
+                  type: tradeType === 'BUY' ? "deposit" : "withdrawal",
+                  asset: asset,
+                  amount: adv.price.toString(),
+                  timestamp: new Date().toISOString(),
+                  from_address: tradeType === 'BUY' ? "P2P User" : account.name,
+                  to_address: tradeType === 'BUY' ? account.name : "P2P User",
+                  tx_id: `P2P_ENHANCED_${adv.advNo}`,
+                  status: "Active",
+                  network: "P2P",
+                  api_source: "Binance_P2P_Enhanced",
+                  additional_info: {
+                    min_amount: adv.minSingleTransQuantity,
+                    max_amount: adv.maxSingleTransQuantity,
+                    commission_rate: adv.commissionRate,
+                    fiat: fiat
+                  }
+                };
+              });
+              
+              transactions.push(...offers);
+              console.log(`        ✅ Found ${offers.length} ${tradeType} offers for ${asset}/${fiat}`);
+            }
+            
+          } catch (error) {
+            console.log(`        ❌ Error fetching ${tradeType} offers for ${asset}/${fiat}: ${error.message}`);
+          }
+        }
+      }
+    }
+    
+    console.log(`    📊 Total P2P offers found: ${transactions.length}`);
+    return transactions;
+    
+  } catch (error) {
+    console.log(`    ❌ Enhanced P2P fetch failed: ${error.message}`);
+    return [];
+  }
 }
 
 // ===========================================
