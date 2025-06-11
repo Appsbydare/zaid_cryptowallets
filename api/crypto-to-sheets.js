@@ -1785,18 +1785,16 @@ async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
     let withdrawalsAdded = 0;
     let depositsAdded = 0;
 
+    // Write withdrawals
     if (sortedWithdrawals.length > 0) {
-      console.log(`📤 APPENDING ${sortedWithdrawals.length} new withdrawals at bottom (ascending order)...`);
-      
       const withdrawalRows = sortedWithdrawals.map(tx => [
-        '', '', '', '', '',
         tx.platform, tx.asset, parseFloat(tx.amount).toFixed(8),
         formatDateTimeSimple(tx.timestamp), tx.from_address, tx.to_address, tx.tx_id
       ]);
-
+    
       await sheets.spreadsheets.values.append({
         spreadsheetId,
-        range: 'Withdrawals!A:L',
+        range: 'Withdrawals!F:L',
         valueInputOption: 'RAW',
         requestBody: { values: withdrawalRows }
       });
