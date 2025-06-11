@@ -549,27 +549,18 @@ async function fetchBinanceP2PFixed(account, filterDate) {
   try {
     console.log(`    🤝 Fetching P2P transactions for ${account.name} using FIXED endpoint...`);
     
-    // FIXED: Only use the working P2P endpoint
-    const endTime = Date.now();
-    const startTime = Math.max(filterDate.getTime(), endTime - (30 * 24 * 60 * 60 * 1000));
-    
-    const tradeTypes = ['BUY', 'SELL'];
-    
-    for (const tradeType of tradeTypes) {
+    // Process both BUY and SELL orders
+    for (const tradeType of ['BUY', 'SELL']) {
       try {
         console.log(`      🔧 Fetching P2P ${tradeType} orders...`);
         
         const timestamp = Date.now();
         const endpoint = "https://api.binance.com/sapi/v1/c2c/orderMatch/listUserOrderHistory";
-        
         const params = {
           tradeType: tradeType,
-          startTimestamp: startTime,
-          endTimestamp: endTime,
-          page: 1,
-          rows: 50, // FIXED: Reduced to safe limit
           timestamp: timestamp,
-          recvWindow: 5000
+          recvWindow: 5000,
+          limit: 100
         };
 
         const signature = createBinanceSignature(params, account.apiSecret);
@@ -585,11 +576,9 @@ async function fetchBinanceP2PFixed(account, filterDate) {
         });
 
         if (!response.ok) {
-          if (response.status === 451) {
-            console.log(`        🚫 P2P API geo-blocked for ${account.name}`);
-            break;
-          }
-          throw new Error(`P2P API error: ${response.status}`);
+          const errorText = await response.text();
+          console.log(`        ❌ P2P ${tradeType} API Error: ${response.status} - ${errorText}`);
+          continue;
         }
 
         const data = await response.json();
@@ -837,8 +826,8 @@ async function fetchByBitDepositsFixed(config, filterDate) {
     const recvWindow = "5000";
     const endpoint = "https://api.bybit.com/v5/asset/deposit/query-record";
     
-    // FIXED: Proper query string construction
-    const queryParams = `timestamp=${timestamp}&limit=50&startTime=${filterDate.getTime()}`;
+    // FIXED: Proper query string construction with all required parameters
+    const queryParams = `timestamp=${timestamp}&limit=50&startTime=${filterDate.getTime()}&endTime=${Date.now()}`;
     const signString = timestamp + config.apiKey + recvWindow + queryParams;
     const signature = crypto.createHmac('sha256', config.apiSecret).update(signString).digest('hex');
     
@@ -872,16 +861,17 @@ async function fetchByBitDepositsFixed(config, filterDate) {
 
     const deposits = data.result.rows.filter(deposit => {
       const depositDate = new Date(parseInt(deposit.successAt));
-      return depositDate >= filterDate && deposit.status === "3";
+      // Status 3 means completed according to ByBit docs
+      return depositDate >= filterDate && deposit.status === 3;
     }).map(deposit => ({
       platform: config.name,
       type: "deposit",
       asset: deposit.coin,
       amount: deposit.amount.toString(),
       timestamp: new Date(parseInt(deposit.successAt)).toISOString(),
-      from_address: deposit.toAddress || "External",
-      to_address: config.name,
-      tx_id: deposit.txID || deposit.id,
+      from_address: deposit.fromAddress || "External",
+      to_address: deposit.toAddress || config.name,
+      tx_id: deposit.txID,
       status: "Completed",
       network: deposit.chain,
       api_source: "ByBit_Deposit_V5_Fixed"
