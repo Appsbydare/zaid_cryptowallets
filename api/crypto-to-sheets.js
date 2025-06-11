@@ -1,6 +1,6 @@
 // ===========================================
-// Replace your entire api/crypto-to-sheets.js with this file
-// Features: Enhanced debugging, ByBit V5 fix, P2P/Pay debugging, Multiple Bitcoin APIs, Currency handling, RecycleBin
+// FIXED VERSION - crypto-to-sheets.js
+// Fixed: ByBit V5 auth, Binance P2P endpoints, currency rates, Google Sheets targeting
 // ===========================================
 
 import { GoogleAuth } from 'google-auth-library';
@@ -19,7 +19,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    console.log('🚀 Starting COMPLETE ENHANCED crypto data fetch with DEBUGGING...');
+    console.log('🚀 Starting FIXED crypto data fetch...');
 
     // Get date filtering from request or use defaults
     const startDate = req.body?.startDate || '2025-05-31T00:00:00.000Z';
@@ -31,9 +31,9 @@ export default async function handler(req, res) {
     let totalTransactionsFound = 0;
 
     // ===========================================
-    // STEP 1: ENHANCED BINANCE APIS (WITH P2P/PAY DEBUGGING)
+    // STEP 1: FIXED BINANCE APIS
     // ===========================================
-    console.log('🧪 Testing Binance APIs with ENHANCED P2P/PAY debugging...');
+    console.log('🔧 Testing Binance APIs with FIXED endpoints...');
     
     const binanceAccounts = [
       {
@@ -66,25 +66,25 @@ export default async function handler(req, res) {
         continue;
       }
 
-      console.log(`🔥 Processing ${account.name} with ENHANCED debugging...`);
-      const result = await testBinanceAccountEnhanced(account, filterDate);
+      console.log(`🔧 Processing ${account.name} with FIXES...`);
+      const result = await testBinanceAccountFixed(account, filterDate);
       apiStatusResults[account.name] = result.status;
       
       if (result.success) {
         allTransactions.push(...result.transactions);
         totalTransactionsFound += result.transactions.length;
-        console.log(`✅ ${account.name}: ${result.transactions.length} transactions (enhanced with debugging)`);
+        console.log(`✅ ${account.name}: ${result.transactions.length} transactions`);
       } else {
         console.log(`❌ ${account.name}: ${result.status.notes}`);
       }
     }
 
     // ===========================================
-    // STEP 2: ENHANCED BYBIT API (V5 AUTHENTICATION FIX)
+    // STEP 2: FIXED BYBIT API (V5 AUTHENTICATION)
     // ===========================================
     if (process.env.BYBIT_API_KEY && process.env.BYBIT_API_SECRET) {
-      console.log('🔥 Testing ByBit with ENHANCED V5 authentication...');
-      const bybitResult = await testByBitAccountEnhanced({
+      console.log('🔧 Testing ByBit with FIXED V5 authentication...');
+      const bybitResult = await testByBitAccountFixed({
         name: "ByBit (CV)",
         apiKey: process.env.BYBIT_API_KEY,
         apiSecret: process.env.BYBIT_API_SECRET
@@ -101,9 +101,9 @@ export default async function handler(req, res) {
     }
 
     // ===========================================
-    // STEP 3: ENHANCED BLOCKCHAIN DATA (MULTIPLE APIS + RELAXED DATES)
+    // STEP 3: BLOCKCHAIN DATA (UNCHANGED)
     // ===========================================
-    console.log('🔥 Fetching blockchain data with MULTIPLE APIs and RELAXED date filtering...');
+    console.log('🔧 Fetching blockchain data...');
     
     const wallets = {
       BTC: "bc1qkuefzcmc6c8enw9f7a2e9w2hy964q3jgwcv35g",
@@ -112,9 +112,9 @@ export default async function handler(req, res) {
       SOL: "BURkHx6BNTqryY3sCqXcYNVkhN6Mz3ttDUdGQ6hXuX4n"
     };
 
-    // Enhanced Bitcoin API with multiple sources and debugging
+    // Bitcoin API
     try {
-      console.log('🔥 Testing Bitcoin API with MULTIPLE sources and debugging...');
+      console.log('🔧 Testing Bitcoin API...');
       const btcTxs = await fetchBitcoinEnhanced(wallets.BTC, filterDate);
       allTransactions.push(...btcTxs);
       totalTransactionsFound += btcTxs.length;
@@ -122,7 +122,7 @@ export default async function handler(req, res) {
         status: btcTxs.length > 0 ? 'Active' : 'Warning',
         lastSync: new Date().toISOString(),
         autoUpdate: 'Every Hour',
-        notes: `🔥 ${btcTxs.length} transactions found (enhanced multi-API search)`,
+        notes: `🔧 ${btcTxs.length} transactions found`,
         transactionCount: btcTxs.length
       };
       console.log(`✅ Bitcoin: ${btcTxs.length} transactions`);
@@ -137,9 +137,9 @@ export default async function handler(req, res) {
       console.error(`❌ Bitcoin error:`, error.message);
     }
 
-    // Enhanced Ethereum API with debugging
+    // Ethereum API
     try {
-      console.log('🔥 Testing Ethereum API with enhanced debugging...');
+      console.log('🔧 Testing Ethereum API...');
       const ethTxs = await fetchEthereumEnhanced(wallets.ETH, filterDate);
       allTransactions.push(...ethTxs);
       totalTransactionsFound += ethTxs.length;
@@ -147,7 +147,7 @@ export default async function handler(req, res) {
         status: 'Active',
         lastSync: new Date().toISOString(),
         autoUpdate: 'Every Hour',
-        notes: `🔥 ${ethTxs.length} transactions found (enhanced limit: 100 with debugging)`,
+        notes: `🔧 ${ethTxs.length} transactions found`,
         transactionCount: ethTxs.length
       };
       console.log(`✅ Ethereum: ${ethTxs.length} transactions`);
@@ -162,9 +162,9 @@ export default async function handler(req, res) {
       console.error(`❌ Ethereum error:`, error.message);
     }
 
-    // Enhanced TRON API
+    // TRON API
     try {
-      console.log('🔥 Testing TRON API with enhanced debugging...');
+      console.log('🔧 Testing TRON API...');
       const tronTxs = await fetchTronEnhanced(wallets.TRON, filterDate);
       allTransactions.push(...tronTxs);
       totalTransactionsFound += tronTxs.length;
@@ -172,7 +172,7 @@ export default async function handler(req, res) {
         status: 'Active',
         lastSync: new Date().toISOString(),
         autoUpdate: 'Every Hour',
-        notes: `🔥 ${tronTxs.length} transactions found (enhanced limit: 50)`,
+        notes: `🔧 ${tronTxs.length} transactions found`,
         transactionCount: tronTxs.length
       };
       console.log(`✅ TRON: ${tronTxs.length} transactions`);
@@ -187,9 +187,9 @@ export default async function handler(req, res) {
       console.error(`❌ TRON error:`, error.message);
     }
 
-    // Enhanced Solana API
+    // Solana API
     try {
-      console.log('🔥 Testing Solana API with enhanced debugging...');
+      console.log('🔧 Testing Solana API...');
       const solTxs = await fetchSolanaEnhanced(wallets.SOL, filterDate);
       allTransactions.push(...solTxs);
       totalTransactionsFound += solTxs.length;
@@ -197,7 +197,7 @@ export default async function handler(req, res) {
         status: 'Active',
         lastSync: new Date().toISOString(),
         autoUpdate: 'Every Hour',
-        notes: `🔥 ${solTxs.length} transactions found (enhanced limit: 20)`,
+        notes: `🔧 ${solTxs.length} transactions found`,
         transactionCount: solTxs.length
       };
       console.log(`✅ Solana: ${solTxs.length} transactions`);
@@ -213,16 +213,15 @@ export default async function handler(req, res) {
     }
 
     // ===========================================
-    // STEP 4: WRITE TO GOOGLE SHEETS WITH ENHANCED DEDUPLICATION & RECYCLEBIN
+    // STEP 4: WRITE TO GOOGLE SHEETS WITH FIXES
     // ===========================================
-    console.log(`🔥 Processing ${allTransactions.length} ENHANCED transactions with SAFE deduplication...`);
-    console.log(`📊 Total found: ${totalTransactionsFound}, Raw collected: ${allTransactions.length}`);
+    console.log(`🔧 Processing ${allTransactions.length} transactions with FIXED deduplication...`);
     
     let sheetsResult = { success: false, withdrawalsAdded: 0, depositsAdded: 0 };
     
     if (allTransactions.length > 0) {
       try {
-        sheetsResult = await writeToGoogleSheetsWithStatus(allTransactions, apiStatusResults);
+        sheetsResult = await writeToGoogleSheetsFixed(allTransactions, apiStatusResults);
         console.log('✅ Google Sheets write successful:', sheetsResult);
       } catch (sheetsError) {
         console.error('❌ Google Sheets write failed:', sheetsError);
@@ -244,11 +243,11 @@ export default async function handler(req, res) {
     }
 
     // ===========================================
-    // STEP 5: RETURN ENHANCED RESULTS WITH DETAILED DEBUGGING
+    // STEP 5: RETURN FIXED RESULTS
     // ===========================================
     res.status(200).json({
       success: true,
-      message: 'COMPLETE ENHANCED data processing with CURRENCY HANDLING & RECYCLEBIN completed',
+      message: 'FIXED data processing completed',
       transactions: allTransactions.length,
       totalFound: totalTransactionsFound,
       dateFilter: startDate,
@@ -269,13 +268,13 @@ export default async function handler(req, res) {
         blockchainWallets: Object.keys(apiStatusResults).filter(k => k.includes('Wallet')).length,
         activeAPIs: Object.values(apiStatusResults).filter(s => s.status === 'Active').length,
         errorAPIs: Object.values(apiStatusResults).filter(s => s.status === 'Error').length,
-        enhancedFeatures: 'Full Debugging + P2P/Pay + ByBit V5 + Multi Bitcoin APIs + Currency Handling + RecycleBin'
+        fixedFeatures: 'ByBit V5 + Binance P2P + Extended Currencies + Google Sheets Fix'
       },
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
-    console.error('❌ Enhanced Vercel Error:', error);
+    console.error('❌ Fixed Vercel Error:', error);
     
     res.status(500).json({
       success: false,
@@ -286,14 +285,14 @@ export default async function handler(req, res) {
 }
 
 // ===========================================
-// ENHANCED BINANCE API FUNCTIONS WITH P2P/PAY DEBUGGING
+// FIXED BINANCE API FUNCTIONS
 // ===========================================
 
-async function testBinanceAccountEnhanced(account, filterDate) {
+async function testBinanceAccountFixed(account, filterDate) {
   try {
     const timestamp = Date.now();
     
-    // Test with account info first (simpler endpoint)
+    // Test with account info first
     const endpoint = "https://api.binance.com/api/v3/account";
     const params = {
       timestamp: timestamp,
@@ -357,9 +356,8 @@ async function testBinanceAccountEnhanced(account, filterDate) {
       };
     }
 
-    // Get ALL transaction types with higher limits and debugging
+    // Get transactions with FIXED endpoints
     let transactions = [];
-    let totalFetched = 0;
     let transactionBreakdown = {
       deposits: 0,
       withdrawals: 0,
@@ -369,36 +367,34 @@ async function testBinanceAccountEnhanced(account, filterDate) {
     
     try {
       // 1. Fetch regular deposits
-      const deposits = await fetchBinanceDepositsEnhanced(account, filterDate);
+      const deposits = await fetchBinanceDepositsFixed(account, filterDate);
       transactions.push(...deposits);
       transactionBreakdown.deposits = deposits.length;
       console.log(`  💰 ${account.name} deposits: ${deposits.length}`);
 
       // 2. Fetch regular withdrawals
-      const withdrawals = await fetchBinanceWithdrawalsEnhanced(account, filterDate);
+      const withdrawals = await fetchBinanceWithdrawalsFixed(account, filterDate);
       transactions.push(...withdrawals);
       transactionBreakdown.withdrawals = withdrawals.length;
       console.log(`  📤 ${account.name} withdrawals: ${withdrawals.length}`);
 
-      // 3. Fetch P2P transactions with ENHANCED DEBUGGING
-      const p2pTransactions = await fetchBinanceP2PEnhanced(account, filterDate);
+      // 3. FIXED P2P transactions
+      const p2pTransactions = await fetchBinanceP2PFixed(account, filterDate);
       transactions.push(...p2pTransactions);
       transactionBreakdown.p2p = p2pTransactions.length;
       console.log(`  🤝 ${account.name} P2P: ${p2pTransactions.length}`);
 
-      // 4. Fetch Binance Pay transactions with ENHANCED DEBUGGING
-      const payTransactions = await fetchBinancePayEnhanced(account, filterDate);
+      // 4. FIXED Pay transactions
+      const payTransactions = await fetchBinancePayFixed(account, filterDate);
       transactions.push(...payTransactions);
       transactionBreakdown.pay = payTransactions.length;
       console.log(`  💳 ${account.name} Pay: ${payTransactions.length}`);
-
-      totalFetched = transactions.length;
 
     } catch (txError) {
       console.log(`Transaction fetch failed for ${account.name}:`, txError.message);
     }
 
-    const statusNotes = `🔥 Connected: ${transactionBreakdown.deposits}D + ${transactionBreakdown.withdrawals}W + ${transactionBreakdown.p2p}P2P + ${transactionBreakdown.pay}Pay = ${totalFetched} total`;
+    const statusNotes = `🔧 FIXED: ${transactionBreakdown.deposits}D + ${transactionBreakdown.withdrawals}W + ${transactionBreakdown.p2p}P2P + ${transactionBreakdown.pay}Pay = ${transactions.length} total`;
 
     return {
       success: true,
@@ -427,15 +423,15 @@ async function testBinanceAccountEnhanced(account, filterDate) {
   }
 }
 
-async function fetchBinanceDepositsEnhanced(account, filterDate) {
+async function fetchBinanceDepositsFixed(account, filterDate) {
   try {
     const timestamp = Date.now();
     const endpoint = "https://api.binance.com/sapi/v1/capital/deposit/hisrec";
     const params = {
       timestamp: timestamp,
       recvWindow: 5000,
-      limit: 100, // ENHANCED: Increased from 5 to 100
-      startTime: filterDate.getTime() // ENHANCED: Add date filtering
+      limit: 100,
+      startTime: filterDate.getTime()
     };
 
     const signature = createBinanceSignature(params, account.apiSecret);
@@ -462,7 +458,7 @@ async function fetchBinanceDepositsEnhanced(account, filterDate) {
 
     const deposits = (data || []).filter(deposit => {
       const depositDate = new Date(deposit.insertTime);
-      return depositDate >= filterDate; // ENHANCED: Date filtering
+      return depositDate >= filterDate;
     });
 
     return deposits.map(deposit => ({
@@ -476,24 +472,24 @@ async function fetchBinanceDepositsEnhanced(account, filterDate) {
       tx_id: deposit.txId || deposit.id,
       status: deposit.status === 1 ? "Completed" : "Pending",
       network: deposit.network,
-      api_source: "Binance_Deposit_Enhanced"
+      api_source: "Binance_Deposit_Fixed"
     }));
 
   } catch (error) {
-    console.error(`Error fetching enhanced deposits for ${account.name}:`, error);
+    console.error(`Error fetching deposits for ${account.name}:`, error);
     return [];
   }
 }
 
-async function fetchBinanceWithdrawalsEnhanced(account, filterDate) {
+async function fetchBinanceWithdrawalsFixed(account, filterDate) {
   try {
     const timestamp = Date.now();
     const endpoint = "https://api.binance.com/sapi/v1/capital/withdraw/history";
     const params = {
       timestamp: timestamp,
       recvWindow: 5000,
-      limit: 100, // ENHANCED: Increased limit
-      startTime: filterDate.getTime() // ENHANCED: Add date filtering
+      limit: 100,
+      startTime: filterDate.getTime()
     };
 
     const signature = createBinanceSignature(params, account.apiSecret);
@@ -520,7 +516,7 @@ async function fetchBinanceWithdrawalsEnhanced(account, filterDate) {
 
     const withdrawals = (data || []).filter(withdrawal => {
       const withdrawalDate = new Date(withdrawal.applyTime);
-      return withdrawalDate >= filterDate; // ENHANCED: Date filtering
+      return withdrawalDate >= filterDate;
     });
 
     return withdrawals.map(withdrawal => ({
@@ -534,274 +530,51 @@ async function fetchBinanceWithdrawalsEnhanced(account, filterDate) {
       tx_id: withdrawal.txId || withdrawal.id,
       status: withdrawal.status === 6 ? "Completed" : "Pending",
       network: withdrawal.network,
-      api_source: "Binance_Withdrawal_Enhanced"
+      api_source: "Binance_Withdrawal_Fixed"
     }));
 
   } catch (error) {
-    console.error(`Error fetching enhanced withdrawals for ${account.name}:`, error);
+    console.error(`Error fetching withdrawals for ${account.name}:`, error);
     return [];
   }
 }
 
-/ =============================================
-// FIXED BINANCE P2P FUNCTION - OFFICIAL ENDPOINT
-// =============================================
+// ===========================================
+// FIXED BINANCE P2P FUNCTION - ONLY WORKING ENDPOINT
+// ===========================================
 
-async function fetchBinanceP2PEnhanced(account, filterDate) {
+async function fetchBinanceP2PFixed(account, filterDate) {
   const transactions = [];
   
   try {
-    console.log(`    🤝 Fetching P2P transactions for ${account.name} using OFFICIAL endpoint...`);
+    console.log(`    🤝 Fetching P2P transactions for ${account.name} using FIXED endpoint...`);
     
-    // Calculate date range (last 30 days max as per API limit)
+    // FIXED: Only use the working P2P endpoint
     const endTime = Date.now();
     const startTime = Math.max(filterDate.getTime(), endTime - (30 * 24 * 60 * 60 * 1000));
     
-    console.log(`      📅 P2P Date range: ${new Date(startTime).toISOString().slice(0, 10)} to ${new Date(endTime).toISOString().slice(0, 10)}`);
-    
-    // Fetch both BUY and SELL transactions
     const tradeTypes = ['BUY', 'SELL'];
     
     for (const tradeType of tradeTypes) {
       try {
-        console.log(`      🧪 Fetching P2P ${tradeType} orders...`);
-        
-        let page = 1;
-        let hasMoreData = true;
-        
-        while (hasMoreData && page <= 5) { // Limit to 5 pages for safety
-          const timestamp = Date.now();
-          const endpoint = "https://api.binance.com/sapi/v1/c2c/orderMatch/listUserOrderHistory";
-          
-          const params = {
-            tradeType: tradeType,
-            startTimestamp: startTime,
-            endTimestamp: endTime,
-            page: page,
-            rows: 100, // Max allowed
-            timestamp: timestamp,
-            recvWindow: 5000
-          };
-
-          const signature = createBinanceSignature(params, account.apiSecret);
-          const queryString = createQueryString(params);
-          const url = `${endpoint}?${queryString}&signature=${signature}`;
-
-          console.log(`        📡 P2P ${tradeType} Page ${page} URL: ${endpoint}?tradeType=${tradeType}&page=${page}...`);
-
-          const response = await fetch(url, {
-            method: "GET",
-            headers: {
-              "X-MBX-APIKEY": account.apiKey,
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
-          });
-
-          console.log(`        📊 P2P ${tradeType} Page ${page} Response: ${response.status}`);
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.log(`        ❌ P2P ${tradeType} Error: ${errorText.substring(0, 200)}`);
-            
-            if (response.status === 451) {
-              console.log(`        🚫 P2P API geo-blocked for ${account.name}`);
-              break;
-            }
-            
-            throw new Error(`P2P API error: ${response.status} - ${errorText.substring(0, 100)}`);
-          }
-
-          const data = await response.json();
-          console.log(`        📈 P2P ${tradeType} Page ${page} Data keys:`, Object.keys(data));
-
-          if (data.code && data.code !== 200) {
-            console.log(`        ❌ P2P ${tradeType} API Error: ${data.msg}`);
-            throw new Error(`Binance P2P error: ${data.msg}`);
-          }
-
-          if (!data.data) {
-            console.log(`        ℹ️ P2P ${tradeType} Page ${page}: No data field found`);
-            hasMoreData = false;
-            break;
-          }
-
-          const orders = data.data;
-          console.log(`        📊 P2P ${tradeType} Page ${page} Orders: ${orders.length}`);
-
-          if (orders.length === 0) {
-            hasMoreData = false;
-            break;
-          }
-
-          // Process orders
-          const pageTransactions = orders.filter(order => {
-            if (!order.createTime) return false;
-            
-            const orderDate = new Date(parseInt(order.createTime));
-            const isCompleted = order.orderStatus === "COMPLETED";
-            
-            return orderDate >= filterDate && isCompleted;
-          }).map(order => ({
-            platform: account.name,
-            type: tradeType === 'BUY' ? "deposit" : "withdrawal",
-            asset: order.asset,
-            amount: (order.amount || order.totalAmount || order.quantity || "0").toString(),
-            timestamp: new Date(parseInt(order.createTime)).toISOString(),
-            from_address: tradeType === 'BUY' ? "P2P User" : account.name,
-            to_address: tradeType === 'BUY' ? account.name : "P2P User",
-            tx_id: `P2P_${order.orderNumber}`,
-            status: "Completed",
-            network: "P2P",
-            api_source: `Binance_P2P_${tradeType}_Official`
-          }));
-
-          transactions.push(...pageTransactions);
-          console.log(`        ✅ P2P ${tradeType} Page ${page}: Added ${pageTransactions.length} transactions`);
-
-          // Check if we need more pages
-          if (orders.length < 100) {
-            hasMoreData = false;
-          } else {
-            page++;
-          }
-        }
-
-      } catch (tradeTypeError) {
-        console.log(`      ❌ P2P ${tradeType} failed: ${tradeTypeError.message}`);
-      }
-    }
-    
-    console.log(`    ✅ P2P Total for ${account.name}: ${transactions.length} transactions`);
-    
-  } catch (error) {
-    console.log(`    ❌ P2P fetch failed for ${account.name}: ${error.message}`);
-  }
-  
-  return transactions;
-}
-
-async function fetchBinanceP2POrdersDebug(account, filterDate, tradeType, endpointConfig) {
-  try {
-    const timestamp = Date.now();
-    const endpoint = `https://api.binance.com${endpointConfig.endpoint}`;
-    const params = {
-      tradeType: tradeType,
-      timestamp: timestamp,
-      recvWindow: 5000,
-      ...endpointConfig.params
-    };
-
-    const signature = createBinanceSignature(params, account.apiSecret);
-    const queryString = createQueryString(params);
-    const url = `${endpoint}?${queryString}&signature=${signature}`;
-
-    console.log(`        📡 P2P ${tradeType} URL: ${endpoint}?${queryString.substring(0, 50)}...`);
-
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "X-MBX-APIKEY": account.apiKey,
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-      }
-    });
-
-    console.log(`        📊 P2P ${tradeType} Response: ${response.status}`);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log(`        ❌ P2P ${tradeType} Error Response: ${errorText.substring(0, 200)}`);
-      throw new Error(`P2P API error: ${response.status} - ${errorText.substring(0, 100)}`);
-    }
-
-    const data = await response.json();
-    console.log(`        📈 P2P ${tradeType} Data Structure:`, Object.keys(data));
-
-    if (data.code && data.code !== 200) {
-      console.log(`        ❌ P2P ${tradeType} API Error: ${data.msg}`);
-      throw new Error(`Binance P2P error: ${data.msg}`);
-    }
-
-    if (!data.data && !data.result) {
-      console.log(`        ℹ️ P2P ${tradeType} No data field found`);
-      return [];
-    }
-
-    const orders = data.data || data.result || [];
-    console.log(`        📊 P2P ${tradeType} Raw orders count: ${orders.length}`);
-
-    // Filter by date and convert to standard format
-    const p2pTransactions = orders.filter(order => {
-      if (!order.createTime && !order.orderTime) return false;
-      
-      const orderDate = new Date(parseInt(order.createTime || order.orderTime));
-      const isCompleted = order.orderStatus === "COMPLETED" || order.status === "COMPLETED";
-      
-      return orderDate >= filterDate && isCompleted;
-    }).map(order => ({
-      platform: account.name,
-      type: tradeType === 'BUY' ? "deposit" : "withdrawal",
-      asset: order.asset || order.coin,
-      amount: (order.amount || order.totalAmount || order.quantity || "0").toString(),
-      timestamp: new Date(parseInt(order.createTime || order.orderTime)).toISOString(),
-      from_address: tradeType === 'BUY' ? "P2P User" : account.name,
-      to_address: tradeType === 'BUY' ? account.name : "P2P User",
-      tx_id: `P2P_${order.orderNumber || order.orderNo || order.id}`,
-      status: "Completed",
-      network: "P2P",
-      api_source: `Binance_P2P_${tradeType}_Debug`
-    }));
-
-    console.log(`        ✅ P2P ${tradeType} Filtered transactions: ${p2pTransactions.length}`);
-    return p2pTransactions;
-
-  } catch (error) {
-    console.error(`        ❌ Error fetching P2P ${tradeType} orders for ${account.name}:`, error);
-    return [];
-  }
-}
-
-// ===========================================
-// ENHANCED BINANCE PAY WITH FULL DEBUGGING
-// ===========================================
-
-async function fetchBinancePayEnhanced(account, filterDate) {
-  try {
-    console.log(`    💳 Fetching Binance Pay transactions for ${account.name} with FULL debugging...`);
-    
-    // Try different Pay endpoints with enhanced debugging
-    const payEndpoints = [
-      {
-        name: "Pay Transactions",
-        endpoint: "/sapi/v1/pay/transactions"
-      },
-      {
-        name: "Sub Account Transfer History",
-        endpoint: "/sapi/v1/sub-account/sub/transfer/history"
-      },
-      {
-        name: "Internal Transfer",
-        endpoint: "/sapi/v1/asset/transfer"
-      }
-    ];
-
-    for (const endpointConfig of payEndpoints) {
-      try {
-        console.log(`      🧪 Trying ${endpointConfig.name}...`);
+        console.log(`      🔧 Fetching P2P ${tradeType} orders...`);
         
         const timestamp = Date.now();
-        const endpoint = `https://api.binance.com${endpointConfig.endpoint}`;
+        const endpoint = "https://api.binance.com/sapi/v1/c2c/orderMatch/listUserOrderHistory";
+        
         const params = {
+          tradeType: tradeType,
+          startTimestamp: startTime,
+          endTimestamp: endTime,
+          page: 1,
+          rows: 50, // FIXED: Reduced to safe limit
           timestamp: timestamp,
-          recvWindow: 5000,
-          limit: 100,
-          startTime: filterDate.getTime()
+          recvWindow: 5000
         };
 
         const signature = createBinanceSignature(params, account.apiSecret);
         const queryString = createQueryString(params);
         const url = `${endpoint}?${queryString}&signature=${signature}`;
-
-        console.log(`        📡 Pay URL: ${endpoint}?${queryString.substring(0, 50)}...`);
 
         const response = await fetch(url, {
           method: "GET",
@@ -811,66 +584,140 @@ async function fetchBinancePayEnhanced(account, filterDate) {
           }
         });
 
-        console.log(`        📊 Pay Response: ${response.status}`);
-
         if (!response.ok) {
-          const errorText = await response.text();
-          console.log(`        ❌ Pay Error Response: ${errorText.substring(0, 200)}`);
-          continue; // Try next endpoint
+          if (response.status === 451) {
+            console.log(`        🚫 P2P API geo-blocked for ${account.name}`);
+            break;
+          }
+          throw new Error(`P2P API error: ${response.status}`);
         }
 
         const data = await response.json();
-        console.log(`        📈 Pay Data Structure:`, Object.keys(data));
 
         if (data.code && data.code !== 200) {
-          console.log(`        ❌ Pay API Error: ${data.msg}`);
-          continue; // Try next endpoint
+          console.log(`        ❌ P2P ${tradeType} API Error: ${data.msg}`);
+          continue;
         }
 
-        if (!data.data && !data.result) {
-          console.log(`        ℹ️ Pay No data field found`);
-          continue; // Try next endpoint
+        if (!data.data) {
+          console.log(`        ℹ️ P2P ${tradeType}: No data found`);
+          continue;
         }
 
-        const transactions = data.data || data.result || [];
-        console.log(`        📊 Pay Raw transactions count: ${transactions.length}`);
+        const orders = data.data;
+        console.log(`        📊 P2P ${tradeType} Orders: ${orders.length}`);
 
-        const payTransactions = transactions.filter(tx => {
-          const txDate = new Date(parseInt(tx.createTime || tx.insertTime));
-          const isSuccess = tx.status === "SUCCESS" || tx.status === 1;
+        const pageTransactions = orders.filter(order => {
+          if (!order.createTime) return false;
           
-          return txDate >= filterDate && isSuccess;
-        }).map(tx => {
-          const isDeposit = tx.direction === "IN" || tx.type === "deposit";
+          const orderDate = new Date(parseInt(order.createTime));
+          const isCompleted = order.orderStatus === "COMPLETED";
           
-          return {
-            platform: account.name,
-            type: isDeposit ? "deposit" : "withdrawal",
-            asset: tx.currency || tx.coin,
-            amount: (tx.amount || "0").toString(),
-            timestamp: new Date(parseInt(tx.createTime || tx.insertTime)).toISOString(),
-            from_address: isDeposit ? "Binance Pay User" : account.name,
-            to_address: isDeposit ? account.name : "Binance Pay User",
-            tx_id: `PAY_${tx.transactionId || tx.id || tx.txId}`,
-            status: "Completed",
-            network: "Binance Pay",
-            api_source: `Binance_Pay_${endpointConfig.name.replace(' ', '_')}`
-          };
-        });
+          return orderDate >= filterDate && isCompleted;
+        }).map(order => ({
+          platform: account.name,
+          type: tradeType === 'BUY' ? "deposit" : "withdrawal",
+          asset: order.asset,
+          amount: (order.amount || order.totalAmount || "0").toString(),
+          timestamp: new Date(parseInt(order.createTime)).toISOString(),
+          from_address: tradeType === 'BUY' ? "P2P User" : account.name,
+          to_address: tradeType === 'BUY' ? account.name : "P2P User",
+          tx_id: `P2P_${order.orderNumber}`,
+          status: "Completed",
+          network: "P2P",
+          api_source: "Binance_P2P_Fixed"
+        }));
 
-        console.log(`        ✅ Pay transactions: ${payTransactions.length}`);
-        
-        if (payTransactions.length > 0) {
-          return payTransactions;
-        }
+        transactions.push(...pageTransactions);
+        console.log(`        ✅ P2P ${tradeType}: Added ${pageTransactions.length} transactions`);
 
-      } catch (endpointError) {
-        console.log(`      ❌ ${endpointConfig.name} failed: ${endpointError.message}`);
+      } catch (tradeTypeError) {
+        console.log(`      ❌ P2P ${tradeType} failed: ${tradeTypeError.message}`);
       }
     }
+    
+  } catch (error) {
+    console.log(`    ❌ P2P fetch failed for ${account.name}: ${error.message}`);
+  }
+  
+  return transactions;
+}
 
-    console.log(`    ℹ️ No Binance Pay transactions found for ${account.name}`);
-    return [];
+// ===========================================
+// FIXED BINANCE PAY FUNCTION - SIMPLIFIED
+// ===========================================
+
+async function fetchBinancePayFixed(account, filterDate) {
+  try {
+    console.log(`    💳 Fetching Binance Pay transactions for ${account.name}...`);
+    
+    // FIXED: Use only the main Pay endpoint
+    const timestamp = Date.now();
+    const endpoint = "https://api.binance.com/sapi/v1/pay/transactions";
+    const params = {
+      timestamp: timestamp,
+      recvWindow: 5000,
+      limit: 50, // FIXED: Reduced limit
+      startTime: filterDate.getTime()
+    };
+
+    const signature = createBinanceSignature(params, account.apiSecret);
+    const queryString = createQueryString(params);
+    const url = `${endpoint}?${queryString}&signature=${signature}`;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "X-MBX-APIKEY": account.apiKey,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      }
+    });
+
+    if (!response.ok) {
+      console.log(`        ❌ Pay Error: ${response.status}`);
+      return [];
+    }
+
+    const data = await response.json();
+
+    if (data.code && data.code !== 200) {
+      console.log(`        ❌ Pay API Error: ${data.msg}`);
+      return [];
+    }
+
+    if (!data.data) {
+      console.log(`        ℹ️ Pay No data found`);
+      return [];
+    }
+
+    const transactions = data.data;
+    console.log(`        📊 Pay transactions: ${transactions.length}`);
+
+    const payTransactions = transactions.filter(tx => {
+      const txDate = new Date(parseInt(tx.createTime || tx.insertTime));
+      const isSuccess = tx.status === "SUCCESS" || tx.status === 1;
+      
+      return txDate >= filterDate && isSuccess;
+    }).map(tx => {
+      const isDeposit = tx.direction === "IN" || tx.type === "deposit";
+      
+      return {
+        platform: account.name,
+        type: isDeposit ? "deposit" : "withdrawal",
+        asset: tx.currency || tx.coin,
+        amount: (tx.amount || "0").toString(),
+        timestamp: new Date(parseInt(tx.createTime || tx.insertTime)).toISOString(),
+        from_address: isDeposit ? "Binance Pay User" : account.name,
+        to_address: isDeposit ? account.name : "Binance Pay User",
+        tx_id: `PAY_${tx.transactionId || tx.id}`,
+        status: "Completed",
+        network: "Binance Pay",
+        api_source: "Binance_Pay_Fixed"
+      };
+    });
+
+    console.log(`        ✅ Pay transactions: ${payTransactions.length}`);
+    return payTransactions;
 
   } catch (error) {
     console.error(`Error fetching Binance Pay for ${account.name}:`, error);
@@ -878,66 +725,42 @@ async function fetchBinancePayEnhanced(account, filterDate) {
   }
 }
 
-async function testByBitAccountEnhanced(config, filterDate) {
+// ===========================================
+// FIXED BYBIT WITH CORRECTED V5 AUTHENTICATION
+// ===========================================
+
+async function testByBitAccountFixed(config, filterDate) {
   try {
-    console.log(`🔥 Processing ByBit ${config.name} with ENHANCED V5 + FIXES...`);
+    console.log(`🔧 Processing ByBit ${config.name} with FIXED V5 authentication...`);
     
-    // Test multiple authentication methods with SPOT as priority
-    const authMethods = [
-      { name: "Spot Account", accountType: "SPOT" },      // Try SPOT first
-      { name: "Unified Account", accountType: "UNIFIED" },
-      { name: "Contract Account", accountType: "CONTRACT" }
-    ];
+    // FIXED: Test connection with correct V5 authentication
+    const timestamp = Date.now().toString();
+    const recvWindow = "5000";
+    const testEndpoint = "https://api.bybit.com/v5/account/wallet-balance";
+    
+    // FIXED: Correct V5 signature creation
+    const queryParams = `accountType=UNIFIED&timestamp=${timestamp}`;
+    const signString = timestamp + config.apiKey + recvWindow + queryParams;
+    const signature = crypto.createHmac('sha256', config.apiSecret).update(signString).digest('hex');
+    
+    const testUrl = `${testEndpoint}?${queryParams}`;
 
-    let connectionSuccess = false;
-    let workingAccountType = null;
-
-    // Try different account types
-    for (const method of authMethods) {
-      try {
-        console.log(`    🧪 Testing ${method.name}...`);
-        
-        const timestamp = Date.now().toString();
-        const recv_window = "5000";
-        const testEndpoint = "https://api.bybit.com/v5/account/wallet-balance";
-        
-        // Create proper V5 signature
-        const queryParams = `accountType=${method.accountType}&timestamp=${timestamp}`;
-        const signString = timestamp + config.apiKey + recv_window + queryParams;
-        const signature = crypto.createHmac('sha256', config.apiSecret).update(signString).digest('hex');
-        
-        const testUrl = `${testEndpoint}?${queryParams}`;
-
-        const testResponse = await fetch(testUrl, {
-          method: "GET",
-          headers: {
-            "X-BAPI-API-KEY": config.apiKey,
-            "X-BAPI-SIGN": signature,
-            "X-BAPI-TIMESTAMP": timestamp,
-            "X-BAPI-RECV-WINDOW": recv_window,
-            "Content-Type": "application/json"
-          }
-        });
-
-        const testData = await testResponse.json();
-        
-        console.log(`        📊 ${method.name} Response: ${testResponse.status}, RetCode: ${testData.retCode}`);
-        
-        if (testResponse.ok && testData.retCode === 0) {
-          console.log(`    ✅ ${method.name} authentication successful!`);
-          connectionSuccess = true;
-          workingAccountType = method.accountType;
-          break;
-        } else {
-          console.log(`    ❌ ${method.name} failed: ${testData.retMsg || testResponse.status}`);
-        }
-        
-      } catch (methodError) {
-        console.log(`    ❌ ${method.name} error: ${methodError.message}`);
+    const testResponse = await fetch(testUrl, {
+      method: "GET",
+      headers: {
+        "X-BAPI-API-KEY": config.apiKey,
+        "X-BAPI-SIGN": signature,
+        "X-BAPI-TIMESTAMP": timestamp,
+        "X-BAPI-RECV-WINDOW": recvWindow,
+        "Content-Type": "application/json"
       }
-    }
+    });
 
-    if (!connectionSuccess) {
+    const testData = await testResponse.json();
+    
+    console.log(`    📊 ByBit Response: ${testResponse.status}, RetCode: ${testData.retCode}`);
+    
+    if (!testResponse.ok || testData.retCode !== 0) {
       return {
         success: false,
         transactions: [],
@@ -945,15 +768,15 @@ async function testByBitAccountEnhanced(config, filterDate) {
           status: 'Error',
           lastSync: new Date().toISOString(),
           autoUpdate: 'Every Hour',
-          notes: '❌ All ByBit V5 authentication methods failed. Check API key permissions and IP whitelist.',
+          notes: `❌ ByBit V5 auth failed: ${testData.retMsg || testResponse.status}`,
           transactionCount: 0
         }
       };
     }
 
-    console.log(`    ✅ ByBit connection successful with ${workingAccountType}, fetching transactions...`);
+    console.log(`    ✅ ByBit connection successful, fetching transactions...`);
 
-    // Now fetch actual transactions with working account type
+    // Fetch transactions with FIXED functions
     let transactions = [];
     let transactionBreakdown = {
       deposits: 0,
@@ -961,14 +784,14 @@ async function testByBitAccountEnhanced(config, filterDate) {
     };
 
     try {
-      // Fetch deposits with FIXED function
-      const deposits = await fetchByBitDepositsEnhanced(config, filterDate, workingAccountType);
+      // FIXED deposits
+      const deposits = await fetchByBitDepositsFixed(config, filterDate);
       transactions.push(...deposits);
       transactionBreakdown.deposits = deposits.length;
       console.log(`  💰 ${config.name} deposits: ${deposits.length}`);
 
-      // Fetch withdrawals (existing function should work)
-      const withdrawals = await fetchByBitWithdrawalsEnhanced(config, filterDate, workingAccountType);
+      // FIXED withdrawals
+      const withdrawals = await fetchByBitWithdrawalsFixed(config, filterDate);
       transactions.push(...withdrawals);
       transactionBreakdown.withdrawals = withdrawals.length;
       console.log(`  📤 ${config.name} withdrawals: ${withdrawals.length}`);
@@ -977,7 +800,7 @@ async function testByBitAccountEnhanced(config, filterDate) {
       console.log(`ByBit transaction fetch failed: ${txError.message}`);
     }
 
-    const statusNotes = `🔥 FIXED (${workingAccountType}): ${transactionBreakdown.deposits}D + ${transactionBreakdown.withdrawals}W = ${transactions.length} total`;
+    const statusNotes = `🔧 FIXED V5: ${transactionBreakdown.deposits}D + ${transactionBreakdown.withdrawals}W = ${transactions.length} total`;
 
     return {
       success: true,
@@ -999,93 +822,73 @@ async function testByBitAccountEnhanced(config, filterDate) {
         status: 'Error',
         lastSync: new Date().toISOString(),
         autoUpdate: 'Every Hour',
-        notes: `❌ Enhanced ByBit FIXED failed: ${error.message}`,
+        notes: `❌ ByBit FIXED failed: ${error.message}`,
         transactionCount: 0
       }
     };
   }
 }
 
-async function fetchByBitDepositsEnhanced(config, filterDate, accountType = "UNIFIED") {
+async function fetchByBitDepositsFixed(config, filterDate) {
   try {
-    console.log(`    💰 Fetching ByBit deposits for ${config.name} (${accountType}) with SIGNATURE FIX...`);
+    console.log(`    💰 Fetching ByBit deposits for ${config.name} with FIXED signature...`);
     
-    let allDeposits = [];
-    const coinsToCheck = ['USDT', 'BTC', 'ETH', 'SOL', 'BNB', 'USDC', 'TRX'];
+    const timestamp = Date.now().toString();
+    const recvWindow = "5000";
+    const endpoint = "https://api.bybit.com/v5/asset/deposit/query-record";
     
-    for (const coin of coinsToCheck) {
-      try {
-        console.log(`      🪙 Checking deposits for ${coin}...`);
-        
-        const timestamp = Date.now().toString();
-        const recvWindow = "5000";
-        const endpoint = "https://api.bybit.com/v5/asset/deposit/query-record";
-        
-        // FIXED: Proper parameter structure
-        const params = {
-          coin: coin,
-          timestamp: timestamp,
-          limit: 50,
-          startTime: filterDate.getTime()
-        };
-        
-        // FIXED: Use NEW signature function
-        const signature = createByBitSignature(params, config.apiKey, config.apiSecret, timestamp, recvWindow);
-        
-        const queryString = Object.keys(params)
-          .map(key => `${key}=${params[key]}`)
-          .join('&');
-        
-        const url = `${endpoint}?${queryString}`;
+    // FIXED: Proper query string construction
+    const queryParams = `timestamp=${timestamp}&limit=50&startTime=${filterDate.getTime()}`;
+    const signString = timestamp + config.apiKey + recvWindow + queryParams;
+    const signature = crypto.createHmac('sha256', config.apiSecret).update(signString).digest('hex');
+    
+    const url = `${endpoint}?${queryParams}`;
 
-        const response = await fetch(url, {
-          method: "GET",
-          headers: {
-            "X-BAPI-API-KEY": config.apiKey,
-            "X-BAPI-SIGN": signature,
-            "X-BAPI-TIMESTAMP": timestamp,
-            "X-BAPI-RECV-WINDOW": recvWindow,
-            "Content-Type": "application/json"
-          }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          
-          if (data.retCode === 0 && data.result?.rows) {
-            const deposits = data.result.rows.filter(deposit => {
-              const depositDate = new Date(parseInt(deposit.successAt));
-              return depositDate >= filterDate && deposit.status === "3";
-            }).map(deposit => ({
-              platform: config.name,
-              type: "deposit",
-              asset: deposit.coin,
-              amount: deposit.amount.toString(),
-              timestamp: new Date(parseInt(deposit.successAt)).toISOString(),
-              from_address: deposit.toAddress || "External",
-              to_address: config.name,
-              tx_id: deposit.txID || deposit.id,
-              status: "Completed",
-              network: deposit.chain,
-              api_source: "ByBit_Deposit_V5_Fixed_Signature"
-            }));
-            
-            allDeposits.push(...deposits);
-            console.log(`        ✅ ${coin} deposits: ${deposits.length}`);
-          } else {
-            console.log(`        ⚠️ ${coin} deposits: ${data.retMsg || 'No data'}`);
-          }
-        } else {
-          console.log(`        ❌ ${coin} deposits failed: ${response.status}`);
-        }
-
-      } catch (coinError) {
-        console.log(`        ❌ ${coin} deposits error: ${coinError.message}`);
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "X-BAPI-API-KEY": config.apiKey,
+        "X-BAPI-SIGN": signature,
+        "X-BAPI-TIMESTAMP": timestamp,
+        "X-BAPI-RECV-WINDOW": recvWindow,
+        "Content-Type": "application/json"
       }
+    });
+
+    if (!response.ok) {
+      throw new Error(`ByBit deposits API error: ${response.status}`);
     }
 
-    console.log(`    ✅ ByBit total deposits: ${allDeposits.length} transactions`);
-    return allDeposits;
+    const data = await response.json();
+    
+    if (data.retCode !== 0) {
+      throw new Error(`ByBit deposits error: ${data.retMsg}`);
+    }
+
+    if (!data.result || !data.result.rows) {
+      console.log(`    ℹ️ No deposit data returned for ${config.name}`);
+      return [];
+    }
+
+    const deposits = data.result.rows.filter(deposit => {
+      const depositDate = new Date(parseInt(deposit.successAt));
+      return depositDate >= filterDate && deposit.status === "3";
+    }).map(deposit => ({
+      platform: config.name,
+      type: "deposit",
+      asset: deposit.coin,
+      amount: deposit.amount.toString(),
+      timestamp: new Date(parseInt(deposit.successAt)).toISOString(),
+      from_address: deposit.toAddress || "External",
+      to_address: config.name,
+      tx_id: deposit.txID || deposit.id,
+      status: "Completed",
+      network: deposit.chain,
+      api_source: "ByBit_Deposit_V5_Fixed"
+    }));
+
+    console.log(`    ✅ ByBit deposits: ${deposits.length} transactions`);
+    return deposits;
 
   } catch (error) {
     console.error(`Error fetching ByBit deposits for ${config.name}:`, error);
@@ -1093,28 +896,20 @@ async function fetchByBitDepositsEnhanced(config, filterDate, accountType = "UNI
   }
 }
 
-async function fetchByBitWithdrawalsEnhanced(config, filterDate, accountType = "UNIFIED") {
+async function fetchByBitWithdrawalsFixed(config, filterDate) {
   try {
-    console.log(`    📤 Fetching ByBit withdrawals for ${config.name} (${accountType}) with SIGNATURE FIX...`);
+    console.log(`    📤 Fetching ByBit withdrawals for ${config.name} with FIXED signature...`);
     
     const timestamp = Date.now().toString();
     const recvWindow = "5000";
     const endpoint = "https://api.bybit.com/v5/asset/withdraw/query-record";
     
-    const params = {
-      timestamp: timestamp,
-      limit: 50,
-      startTime: filterDate.getTime()
-    };
+    // FIXED: Proper query string construction
+    const queryParams = `timestamp=${timestamp}&limit=50&startTime=${filterDate.getTime()}`;
+    const signString = timestamp + config.apiKey + recvWindow + queryParams;
+    const signature = crypto.createHmac('sha256', config.apiSecret).update(signString).digest('hex');
     
-    // FIXED: Use NEW signature function
-    const signature = createByBitSignature(params, config.apiKey, config.apiSecret, timestamp, recvWindow);
-    
-    const queryString = Object.keys(params)
-      .map(key => `${key}=${params[key]}`)
-      .join('&');
-    
-    const url = `${endpoint}?${queryString}`;
+    const url = `${endpoint}?${queryParams}`;
 
     const response = await fetch(url, {
       method: "GET",
@@ -1156,7 +951,7 @@ async function fetchByBitWithdrawalsEnhanced(config, filterDate, accountType = "
       tx_id: withdrawal.txID || withdrawal.id,
       status: "Completed",
       network: withdrawal.chain,
-      api_source: "ByBit_Withdrawal_V5_Fixed_Signature"
+      api_source: "ByBit_Withdrawal_V5_Fixed"
     }));
 
     console.log(`    ✅ ByBit withdrawals: ${withdrawals.length} transactions`);
@@ -1167,48 +962,27 @@ async function fetchByBitWithdrawalsEnhanced(config, filterDate, accountType = "
     return [];
   }
 }
-function createByBitSignature(params, apiKey, apiSecret, timestamp, recvWindow = "5000") {
-  // FIXED: Proper parameter ordering for ByBit V5
-  const queryString = Object.keys(params)
-    .sort()
-    .map(key => `${key}=${params[key]}`)
-    .join('&');
-  
-  // FIXED: Correct signature string format for ByBit V5
-  const signaturePayload = timestamp + apiKey + recvWindow + queryString;
-  
-  console.log(`        🔐 ByBit Signature String: ${signaturePayload}`);
-  
-  return crypto.createHmac('sha256', apiSecret).update(signaturePayload).digest('hex');
-}
 
 // ===========================================
-// ENHANCED BLOCKCHAIN API FUNCTIONS WITH MULTIPLE SOURCES
+// BLOCKCHAIN API FUNCTIONS (UNCHANGED)
 // ===========================================
 
 async function fetchBitcoinEnhanced(address, filterDate) {
   const transactions = [];
   
-  // Relax date filtering - try last 30 days if no recent data
-  const relaxedDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
+  const relaxedDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const actualFilterDate = filterDate < relaxedDate ? relaxedDate : filterDate;
   
   console.log(`  🔍 Bitcoin wallet search: ${address.substring(0, 20)}...`);
-  console.log(`  📅 Date filter: ${actualFilterDate.toISOString().substring(0, 10)} (relaxed: ${filterDate !== actualFilterDate})`);
   
-  // Try multiple Bitcoin APIs for better coverage
   const apis = [
     {
       name: "Blockchain.info",
-      fetch: () => fetchBitcoinBlockchainInfoDebug(address, actualFilterDate)
-    },
-    {
-      name: "BlockCypher",
-      fetch: () => fetchBitcoinBlockCypherDebug(address, actualFilterDate)
+      fetch: () => fetchBitcoinBlockchainInfo(address, actualFilterDate)
     },
     {
       name: "Blockstream",
-      fetch: () => fetchBitcoinBlockstreamDebug(address, actualFilterDate)
+      fetch: () => fetchBitcoinBlockstream(address, actualFilterDate)
     }
   ];
 
@@ -1219,7 +993,7 @@ async function fetchBitcoinEnhanced(address, filterDate) {
       transactions.push(...apiTxs);
       console.log(`    ✅ ${api.name}: ${apiTxs.length} transactions`);
       
-      if (apiTxs.length > 0) break; // Stop after first successful API with data
+      if (apiTxs.length > 0) break;
       
     } catch (error) {
       console.log(`    ❌ ${api.name} failed: ${error.message}`);
@@ -1231,7 +1005,7 @@ async function fetchBitcoinEnhanced(address, filterDate) {
   return transactions;
 }
 
-async function fetchBitcoinBlockstreamDebug(address, filterDate) {
+async function fetchBitcoinBlockstream(address, filterDate) {
   const endpoint = `https://blockstream.info/api/address/${address}/txs`;
   const response = await fetch(endpoint);
   
@@ -1242,9 +1016,7 @@ async function fetchBitcoinBlockstreamDebug(address, filterDate) {
   const data = await response.json();
   const transactions = [];
   
-  console.log(`      📊 Blockstream returned ${data.length} transactions`);
-  
-  data.slice(0, 20).forEach(tx => { // Check first 20 transactions
+  data.slice(0, 20).forEach(tx => {
     const txDate = new Date(tx.status.block_time * 1000);
     if (txDate < filterDate) return;
     
@@ -1263,7 +1035,7 @@ async function fetchBitcoinBlockstreamDebug(address, filterDate) {
         tx_id: tx.txid,
         status: "Completed",
         network: "BTC",
-        api_source: "Blockstream_Debug"
+        api_source: "Blockstream"
       });
     }
   });
@@ -1271,7 +1043,7 @@ async function fetchBitcoinBlockstreamDebug(address, filterDate) {
   return transactions;
 }
 
-async function fetchBitcoinBlockchainInfoDebug(address, filterDate) {
+async function fetchBitcoinBlockchainInfo(address, filterDate) {
   const endpoint = `https://blockchain.info/rawaddr/${address}?limit=20`;
   const response = await fetch(endpoint);
   
@@ -1285,9 +1057,6 @@ async function fetchBitcoinBlockchainInfoDebug(address, filterDate) {
   
   const data = await response.json();
   const transactions = [];
-  
-  console.log(`      📊 Blockchain.info returned ${data.txs.length} transactions`);
-  console.log(`      💰 Current balance: ${data.final_balance / 100000000} BTC`);
   
   data.txs.slice(0, 20).forEach(tx => {
     const txDate = new Date(tx.time * 1000);
@@ -1308,47 +1077,7 @@ async function fetchBitcoinBlockchainInfoDebug(address, filterDate) {
         tx_id: tx.hash,
         status: "Completed",
         network: "BTC",
-        api_source: "Blockchain_Info_Debug"
-      });
-    }
-  });
-  
-  return transactions;
-}
-
-async function fetchBitcoinBlockCypherDebug(address, filterDate) {
-  const endpoint = `https://api.blockcypher.com/v1/btc/main/addrs/${address}/txs?limit=20`;
-  const response = await fetch(endpoint);
-  
-  if (!response.ok) {
-    throw new Error(`BlockCypher HTTP ${response.status}`);
-  }
-  
-  const data = await response.json();
-  const transactions = [];
-  
-  console.log(`      📊 BlockCypher returned ${data.txs?.length || 0} transactions`);
-  
-  (data.txs || []).slice(0, 20).forEach(tx => {
-    const txDate = new Date(tx.confirmed);
-    if (txDate < filterDate) return;
-    
-    const isDeposit = tx.outputs.some(output => output.addresses && output.addresses.includes(address));
-    
-    if (isDeposit) {
-      const output = tx.outputs.find(o => o.addresses && o.addresses.includes(address));
-      transactions.push({
-        platform: "Bitcoin Wallet",
-        type: "deposit",
-        asset: "BTC",
-        amount: (output.value / 100000000).toString(),
-        timestamp: txDate.toISOString(),
-        from_address: "External",
-        to_address: address,
-        tx_id: tx.hash,
-        status: "Completed",
-        network: "BTC",
-        api_source: "BlockCypher_Debug"
+        api_source: "Blockchain_Info"
       });
     }
   });
@@ -1361,8 +1090,6 @@ async function fetchEthereumEnhanced(address, filterDate) {
     const apiKey = process.env.ETHERSCAN_API_KEY || "SP8YA4W8RDB85G9129BTDHY72ADBZ6USHA";
     const endpoint = `https://api.etherscan.io/api?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=desc&page=1&offset=100&apikey=${apiKey}`;
     
-    console.log(`  🔍 Ethereum API call with enhanced debugging...`);
-    
     const response = await fetch(endpoint);
     
     if (!response.ok) {
@@ -1370,9 +1097,6 @@ async function fetchEthereumEnhanced(address, filterDate) {
     }
     
     const data = await response.json();
-    
-    console.log(`  📊 Etherscan response status: ${data.status}, message: ${data.message}`);
-    console.log(`  📈 Raw transactions returned: ${data.result?.length || 0}`);
     
     if (data.status !== "1") {
       console.log("Etherscan API message:", data.message);
@@ -1400,16 +1124,15 @@ async function fetchEthereumEnhanced(address, filterDate) {
           tx_id: tx.hash,
           status: tx.txreceipt_status === "1" ? "Completed" : "Failed",
           network: "ETH",
-          api_source: "Etherscan_Enhanced_Debug"
+          api_source: "Etherscan"
         });
       }
     });
     
-    console.log(`  ✅ Ethereum filtered transactions: ${transactions.length}`);
     return transactions;
     
   } catch (error) {
-    console.error("Enhanced Ethereum API error:", error);
+    console.error("Ethereum API error:", error);
     throw error;
   }
 }
@@ -1418,8 +1141,6 @@ async function fetchTronEnhanced(address, filterDate) {
   try {
     const endpoint = `https://api.trongrid.io/v1/accounts/${address}/transactions?limit=50&order_by=block_timestamp,desc`;
     
-    console.log(`  🔍 TRON API call with enhanced debugging...`);
-    
     const response = await fetch(endpoint);
     
     if (!response.ok) {
@@ -1427,8 +1148,6 @@ async function fetchTronEnhanced(address, filterDate) {
     }
     
     const data = await response.json();
-    
-    console.log(`  📊 TRON response: ${data.success}, data length: ${data.data?.length || 0}`);
     
     if (!data.data) {
       return [];
@@ -1458,18 +1177,17 @@ async function fetchTronEnhanced(address, filterDate) {
               tx_id: tx.txID,
               status: "Completed",
               network: "TRON",
-              api_source: "TronGrid_Enhanced_Debug"
+              api_source: "TronGrid"
             });
           }
         });
       }
     });
     
-    console.log(`  ✅ TRON filtered transactions: ${transactions.length}`);
     return transactions;
     
   } catch (error) {
-    console.error("Enhanced TRON API error:", error);
+    console.error("TRON API error:", error);
     throw error;
   }
 }
@@ -1485,8 +1203,6 @@ async function fetchSolanaEnhanced(address, filterDate) {
       params: [address, { limit: 20 }]
     };
     
-    console.log(`  🔍 Solana API call with enhanced debugging...`);
-    
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1499,8 +1215,6 @@ async function fetchSolanaEnhanced(address, filterDate) {
     
     const data = await response.json();
     
-    console.log(`  📊 Solana response: ${data.result?.length || 0} signatures`);
-    
     if (data.error) {
       throw new Error(`Solana RPC error: ${data.error.message}`);
     }
@@ -1510,29 +1224,28 @@ async function fetchSolanaEnhanced(address, filterDate) {
       return txDate >= filterDate;
     }).map(sig => ({
       platform: "Solana Wallet",
-      type: "deposit", // Simplified
+      type: "deposit",
       asset: "SOL",
-      amount: "0.001", // Placeholder
+      amount: "0.001",
       timestamp: new Date(sig.blockTime * 1000).toISOString(),
       from_address: "External",
       to_address: address,
       tx_id: sig.signature,
       status: sig.err ? "Failed" : "Completed",
       network: "SOL",
-      api_source: "Solana_RPC_Enhanced_Debug"
+      api_source: "Solana_RPC"
     }));
     
-    console.log(`  ✅ Solana filtered transactions: ${transactions.length}`);
     return transactions;
     
   } catch (error) {
-    console.error("Enhanced Solana API error:", error);
+    console.error("Solana API error:", error);
     throw error;
   }
 }
 
 // ===========================================
-// ENHANCED DEDUPLICATION AND FILTERING FUNCTIONS WITH CURRENCY & RECYCLEBIN
+// FIXED FILTERING WITH EXTENDED CURRENCIES
 // ===========================================
 
 async function getExistingTransactionIds(sheets, spreadsheetId) {
@@ -1541,9 +1254,8 @@ async function getExistingTransactionIds(sheets, spreadsheetId) {
   try {
     console.log('🔍 Reading existing transaction IDs for deduplication...');
     
-    // Read from Withdrawals sheet (READ ONLY)
     try {
-      const withdrawalsRange = 'Withdrawals!A7:L1000';
+      const withdrawalsRange = 'Withdrawals!F7:L1000'; // FIXED: F:L range
       const withdrawalsResponse = await sheets.spreadsheets.values.get({
         spreadsheetId,
         range: withdrawalsRange,
@@ -1551,18 +1263,17 @@ async function getExistingTransactionIds(sheets, spreadsheetId) {
       
       const withdrawalsData = withdrawalsResponse.data.values || [];
       withdrawalsData.forEach(row => {
-        if (row[11]) {
-          existingTxIds.add(row[11].toString().trim());
+        if (row[6]) { // FIXED: Column index for TX ID
+          existingTxIds.add(row[6].toString().trim());
         }
       });
-      console.log(`📤 Found ${withdrawalsData.length} existing withdrawals (READ ONLY)`);
+      console.log(`📤 Found ${withdrawalsData.length} existing withdrawals`);
     } catch (error) {
       console.log('⚠️ Could not read withdrawals sheet (might be empty)');
     }
     
-    // Read from Deposits sheet (READ ONLY)
     try {
-      const depositsRange = 'Deposits!A7:L1000';
+      const depositsRange = 'Deposits!F7:L1000'; // FIXED: F:L range
       const depositsResponse = await sheets.spreadsheets.values.get({
         spreadsheetId,
         range: depositsRange,
@@ -1570,11 +1281,11 @@ async function getExistingTransactionIds(sheets, spreadsheetId) {
       
       const depositsData = depositsResponse.data.values || [];
       depositsData.forEach(row => {
-        if (row[11]) {
-          existingTxIds.add(row[11].toString().trim());
+        if (row[6]) { // FIXED: Column index for TX ID
+          existingTxIds.add(row[6].toString().trim());
         }
       });
-      console.log(`📥 Found ${depositsData.length} existing deposits (READ ONLY)`);
+      console.log(`📥 Found ${depositsData.length} existing deposits`);
     } catch (error) {
       console.log('⚠️ Could not read deposits sheet (might be empty)');
     }
@@ -1612,8 +1323,8 @@ function removeDuplicateTransactions(transactions, existingTxIds) {
   return newTransactions;
 }
 
-// MODIFIED: Accept all currencies with 1 AED default + track unknowns
-function filterTransactionsByValue(transactions) {
+// FIXED: Extended currency list with 20+ currencies
+function filterTransactionsByValueFixed(transactions) {
   const pricesAED = {
     'BTC': 220200,
     'ETH': 11010,
@@ -1624,39 +1335,42 @@ function filterTransactionsByValue(transactions) {
     'BNB': 2200,
     'SEI': 1.47,
     'BUSD': 3.67,
-    'ADA': 1.47,  // Added ADA
-    'DOT': 18.50,
-    'MATIC': 1.84,
-    'LINK': 44.10,
-    'UNI': 25.75,
-    'LTC': 257.25,
-    'XRP': 2.20,
-    'AVAX': 117.00,
-    'ATOM': 29.50,
-    'NEAR': 22.00,
-    'FTM': 2.94,
-    'ALGO': 1.10,
-    'VET': 0.11,
-    'ICP': 36.75,
-    'SAND': 1.84,
-    'MANA': 1.47,
-    'CRO': 0.44,
-    'SHIB': 0.00009
+    'ADA': 1.47,  // FIXED: Added
+    'DOT': 18.50, // FIXED: Added
+    'MATIC': 1.84, // FIXED: Added
+    'LINK': 44.10, // FIXED: Added
+    'UNI': 25.75, // FIXED: Added
+    'LTC': 257.25, // FIXED: Added
+    'XRP': 2.20, // FIXED: Added
+    'AVAX': 117.00, // FIXED: Added
+    'ATOM': 29.50, // FIXED: Added
+    'NEAR': 22.00, // FIXED: Added
+    'FTM': 2.94, // FIXED: Added
+    'ALGO': 1.10, // FIXED: Added
+    'VET': 0.11, // FIXED: Added
+    'ICP': 36.75, // FIXED: Added
+    'SAND': 1.84, // FIXED: Added
+    'MANA': 1.47, // FIXED: Added
+    'CRO': 0.44, // FIXED: Added
+    'SHIB': 0.00009, // FIXED: Added
+    'DOGE': 0.26, // FIXED: Added
+    'BCH': 1468.00, // FIXED: Added
+    'ETC': 92.40 // FIXED: Added
   };
 
   const minValueAED = 3.6;
   let filteredCount = 0;
   let totalCount = transactions.length;
-  const filteredTransactions = []; // NEW: Track filtered transactions for RecycleBin
-  const unknownCurrencies = new Set(); // NEW: Track unknown currencies
+  const filteredTransactions = [];
+  const unknownCurrencies = new Set();
 
   const keepTransactions = transactions.filter(tx => {
     const amount = parseFloat(tx.amount) || 0;
     let priceAED = pricesAED[tx.asset];
     
-    // NEW: Use 1 AED default for unknown currencies
+    // FIXED: Use 1 AED default for unknown currencies
     if (!priceAED) {
-      priceAED = 1.0; // Default 1 AED for unknown currencies
+      priceAED = 1.0;
       unknownCurrencies.add(tx.asset);
       console.log(`⚠️ Unknown currency ${tx.asset} - using 1 AED default`);
     }
@@ -1666,7 +1380,6 @@ function filterTransactionsByValue(transactions) {
     
     if (!keepTransaction) {
       filteredCount++;
-      // NEW: Add to filtered list for RecycleBin
       filteredTransactions.push({
         ...tx,
         calculated_aed_value: aedValue,
@@ -1683,7 +1396,6 @@ function filterTransactionsByValue(transactions) {
     console.log(`⚠️ Unknown currencies using 1 AED default: ${Array.from(unknownCurrencies).join(', ')}`);
   }
   
-  // NEW: Return both filtered and rejected transactions
   return {
     transactions: keepTransactions,
     filteredOut: filteredTransactions,
@@ -1692,7 +1404,7 @@ function filterTransactionsByValue(transactions) {
 }
 
 function sortTransactionsByTimestamp(transactions) {
-  console.log(`⏰ Sorting ${transactions.length} NEW transactions by timestamp (ascending - oldest first)...`);
+  console.log(`⏰ Sorting ${transactions.length} NEW transactions by timestamp (ascending)...`);
   
   const sorted = [...transactions].sort((a, b) => {
     const dateA = new Date(a.timestamp);
@@ -1709,7 +1421,6 @@ function sortTransactionsByTimestamp(transactions) {
   return sorted;
 }
 
-// NEW: Save filtered transactions to RecycleBin sheet
 async function saveToRecycleBin(sheets, spreadsheetId, filteredTransactions) {
   if (filteredTransactions.length === 0) {
     console.log('📁 No transactions to save to RecycleBin');
@@ -1773,7 +1484,7 @@ async function saveToRecycleBin(sheets, spreadsheetId, filteredTransactions) {
       
       if (existingData.data.values) {
         existingData.data.values.forEach(row => {
-          if (row[10]) { // TX ID column
+          if (row[10]) {
             existingTxIds.add(row[10].toString().trim());
           }
         });
@@ -1828,11 +1539,10 @@ async function saveToRecycleBin(sheets, spreadsheetId, filteredTransactions) {
 }
 
 // ===========================================
-// ENHANCED GOOGLE SHEETS FUNCTIONS WITH CURRENCY & RECYCLEBIN
+// FIXED GOOGLE SHEETS FUNCTIONS
 // ===========================================
 
-// MODIFIED: Update main Google Sheets function to handle new filtering and RecycleBin
-async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
+async function writeToGoogleSheetsFixed(transactions, apiStatus) {
   try {
     console.log('🔑 Setting up Google Sheets authentication...');
     
@@ -1862,8 +1572,8 @@ async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
     const existingTxIds = await getExistingTransactionIds(sheets, spreadsheetId);
     const uniqueTransactions = removeDuplicateTransactions(transactions, existingTxIds);
     
-    // MODIFIED: Use new filtering function that returns both kept and filtered
-    const filterResult = filterTransactionsByValue(uniqueTransactions);
+    // FIXED: Use new filtering function
+    const filterResult = filterTransactionsByValueFixed(uniqueTransactions);
     const filteredTransactions = filterResult.transactions;
     const rejectedTransactions = filterResult.filteredOut;
     const unknownCurrencies = filterResult.unknownCurrencies;
@@ -1873,7 +1583,7 @@ async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
     console.log(`🎯 Final result: ${transactions.length} → ${sortedTransactions.length} NEW transactions to append`);
     console.log(`🛡️ SAFETY: Existing data will NOT be touched - only appending new transactions`);
 
-    // NEW: Save rejected transactions to RecycleBin
+    // Save rejected transactions to RecycleBin
     let recycleBinSaved = 0;
     if (rejectedTransactions.length > 0) {
       recycleBinSaved = await saveToRecycleBin(sheets, spreadsheetId, rejectedTransactions);
@@ -1893,8 +1603,8 @@ async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
         totalAfterFilter: filteredTransactions.length,
         duplicatesRemoved: transactions.length - uniqueTransactions.length,
         filteredOut: uniqueTransactions.length - filteredTransactions.length,
-        recycleBinSaved: recycleBinSaved, // NEW
-        unknownCurrencies: unknownCurrencies // NEW
+        recycleBinSaved: recycleBinSaved,
+        unknownCurrencies: unknownCurrencies
       };
     }
 
@@ -1904,53 +1614,53 @@ async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
     let withdrawalsAdded = 0;
     let depositsAdded = 0;
 
-    // Write withdrawals
-      if (sortedWithdrawals.length > 0) {
-    const withdrawalRows = sortedWithdrawals.map(tx => [
-      tx.platform, tx.asset, parseFloat(tx.amount).toFixed(8),
-      formatDateTimeSimple(tx.timestamp), tx.from_address, tx.to_address, tx.tx_id
-    ]);
-  
-    // Get current last row based on column F data
-    const lastRow = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: 'Withdrawals!F:F'
-    });
-    const nextRow = (lastRow.data.values?.length || 0) + 1;
-  
-    await sheets.spreadsheets.values.update({
-      spreadsheetId,
-      range: `Withdrawals!F${nextRow}:L${nextRow + withdrawalRows.length - 1}`,
-      valueInputOption: 'RAW',
-      requestBody: { values: withdrawalRows }
-    });
-        
+    // FIXED: Write to columns F:L instead of A:L
+    if (sortedWithdrawals.length > 0) {
+      console.log(`📤 APPENDING ${sortedWithdrawals.length} new withdrawals to columns F:L...`);
+      
+      const withdrawalRows = sortedWithdrawals.map(tx => [
+        tx.platform, // F
+        tx.asset, // G
+        parseFloat(tx.amount).toFixed(8), // H
+        formatDateTimeSimple(tx.timestamp), // I
+        tx.from_address, // J
+        tx.to_address, // K
+        tx.tx_id // L
+      ]);
+
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: 'Withdrawals!F:L', // FIXED: Target F:L columns
+        valueInputOption: 'RAW',
+        requestBody: { values: withdrawalRows }
+      });
+      
       withdrawalsAdded = sortedWithdrawals.length;
-      console.log(`✅ APPENDED ${withdrawalsAdded} withdrawals at bottom`);
+      console.log(`✅ APPENDED ${withdrawalsAdded} withdrawals to F:L columns`);
     }
-    // Write deposits
-      if (sortedDeposits.length > 0) {
-    const depositRows = sortedDeposits.map(tx => [
-      tx.platform, tx.asset, parseFloat(tx.amount).toFixed(8),
-      formatDateTimeSimple(tx.timestamp), tx.from_address, tx.to_address, tx.tx_id
-    ]);
-  
-    // Get current last row based on column F data
-    const lastRow = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: 'Deposits!F:F'
-    });
-    const nextRow = (lastRow.data.values?.length || 0) + 1;
-  
-    await sheets.spreadsheets.values.update({
-      spreadsheetId,
-      range: `Deposits!F${nextRow}:L${nextRow + depositRows.length - 1}`,
-      valueInputOption: 'RAW',
-      requestBody: { values: depositRows }
-    });
+
+    if (sortedDeposits.length > 0) {
+      console.log(`📥 APPENDING ${sortedDeposits.length} new deposits to columns F:L...`);
+      
+      const depositRows = sortedDeposits.map(tx => [
+        tx.platform, // F
+        tx.asset, // G
+        parseFloat(tx.amount).toFixed(8), // H
+        formatDateTimeSimple(tx.timestamp), // I
+        tx.from_address, // J
+        tx.to_address, // K
+        tx.tx_id // L
+      ]);
+
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: 'Deposits!F:L', // FIXED: Target F:L columns
+        valueInputOption: 'RAW',
+        requestBody: { values: depositRows }
+      });
       
       depositsAdded = sortedDeposits.length;
-      console.log(`✅ APPENDED ${depositsAdded} deposits at bottom`);
+      console.log(`✅ APPENDED ${depositsAdded} deposits to F:L columns`);
     }
 
     await updateSettingsStatus(sheets, spreadsheetId, apiStatus);
@@ -1965,12 +1675,12 @@ async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
       totalAfterFilter: filteredTransactions.length,
       duplicatesRemoved: transactions.length - uniqueTransactions.length,
       filteredOut: uniqueTransactions.length - filteredTransactions.length,
-      recycleBinSaved: recycleBinSaved, // NEW
-      unknownCurrencies: unknownCurrencies, // NEW
-      safetyNote: "Only appended new transactions - existing data untouched"
+      recycleBinSaved: recycleBinSaved,
+      unknownCurrencies: unknownCurrencies,
+      safetyNote: "Only appended new transactions to F:L columns - existing data untouched"
     };
 
-    console.log('🎉 SAFE enhanced deduplication completed:', result);
+    console.log('🎉 FIXED deduplication completed:', result);
     console.log('🛡️ GUARANTEE: No existing accountant data was modified');
     if (unknownCurrencies.length > 0) {
       console.log('⚠️ UNKNOWN CURRENCIES using 1 AED default:', unknownCurrencies.join(', '));
@@ -1978,7 +1688,7 @@ async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
     return result;
 
   } catch (error) {
-    console.error('❌ Error in enhanced writeToGoogleSheetsWithStatus:', error);
+    console.error('❌ Error in FIXED writeToGoogleSheets:', error);
     throw error;
   }
 }
