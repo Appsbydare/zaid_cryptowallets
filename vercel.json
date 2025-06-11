@@ -1,3 +1,8 @@
 {
-  "regions": ["sin1"]
+  "functions": {
+    "api/crypto-to-sheets.js": {
+      "regions": ["sin1"],
+      "maxDuration": 60
+    }
+  }
 }
