@@ -544,57 +544,135 @@ async function fetchBinanceWithdrawalsEnhanced(account, filterDate) {
   }
 }
 
-// ===========================================
-// ENHANCED BINANCE P2P WITH FULL DEBUGGING
-// ===========================================
+/ =============================================
+// FIXED BINANCE P2P FUNCTION - OFFICIAL ENDPOINT
+// =============================================
 
 async function fetchBinanceP2PEnhanced(account, filterDate) {
   const transactions = [];
   
   try {
-    console.log(`    🤝 Fetching P2P transactions for ${account.name} with FULL debugging...`);
+    console.log(`    🤝 Fetching P2P transactions for ${account.name} using OFFICIAL endpoint...`);
     
-    // Try different P2P endpoints with enhanced debugging
-    const p2pEndpoints = [
-      {
-        name: "Order Match History",
-        endpoint: "/sapi/v1/c2c/orderMatch/listUserOrderHistory",
-        params: { page: 1, rows: 100 }
-      },
-      {
-        name: "C2C Trade History", 
-        endpoint: "/sapi/v1/c2c/orderMatch/getUserOrderHistory",
-        params: { page: 1, rows: 100 }
-      },
-      {
-        name: "C2C Order History",
-        endpoint: "/sapi/v1/c2c/orderMatch/orderHistory", 
-        params: { page: 1, rows: 100 }
-      }
-    ];
-
-    for (const endpointConfig of p2pEndpoints) {
+    // Calculate date range (last 30 days max as per API limit)
+    const endTime = Date.now();
+    const startTime = Math.max(filterDate.getTime(), endTime - (30 * 24 * 60 * 60 * 1000));
+    
+    console.log(`      📅 P2P Date range: ${new Date(startTime).toISOString().slice(0, 10)} to ${new Date(endTime).toISOString().slice(0, 10)}`);
+    
+    // Fetch both BUY and SELL transactions
+    const tradeTypes = ['BUY', 'SELL'];
+    
+    for (const tradeType of tradeTypes) {
       try {
-        console.log(`      🧪 Trying ${endpointConfig.name}...`);
+        console.log(`      🧪 Fetching P2P ${tradeType} orders...`);
         
-        // Fetch P2P Buy orders (deposits)
-        const buyOrders = await fetchBinanceP2POrdersDebug(account, filterDate, 'BUY', endpointConfig);
-        transactions.push(...buyOrders);
+        let page = 1;
+        let hasMoreData = true;
         
-        // Fetch P2P Sell orders (withdrawals)  
-        const sellOrders = await fetchBinanceP2POrdersDebug(account, filterDate, 'SELL', endpointConfig);
-        transactions.push(...sellOrders);
-        
-        console.log(`      ✅ ${endpointConfig.name}: ${buyOrders.length} buys + ${sellOrders.length} sells`);
-        
-        if (buyOrders.length > 0 || sellOrders.length > 0) {
-          break; // Stop if we found data
+        while (hasMoreData && page <= 5) { // Limit to 5 pages for safety
+          const timestamp = Date.now();
+          const endpoint = "https://api.binance.com/sapi/v1/c2c/orderMatch/listUserOrderHistory";
+          
+          const params = {
+            tradeType: tradeType,
+            startTimestamp: startTime,
+            endTimestamp: endTime,
+            page: page,
+            rows: 100, // Max allowed
+            timestamp: timestamp,
+            recvWindow: 5000
+          };
+
+          const signature = createBinanceSignature(params, account.apiSecret);
+          const queryString = createQueryString(params);
+          const url = `${endpoint}?${queryString}&signature=${signature}`;
+
+          console.log(`        📡 P2P ${tradeType} Page ${page} URL: ${endpoint}?tradeType=${tradeType}&page=${page}...`);
+
+          const response = await fetch(url, {
+            method: "GET",
+            headers: {
+              "X-MBX-APIKEY": account.apiKey,
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+          });
+
+          console.log(`        📊 P2P ${tradeType} Page ${page} Response: ${response.status}`);
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.log(`        ❌ P2P ${tradeType} Error: ${errorText.substring(0, 200)}`);
+            
+            if (response.status === 451) {
+              console.log(`        🚫 P2P API geo-blocked for ${account.name}`);
+              break;
+            }
+            
+            throw new Error(`P2P API error: ${response.status} - ${errorText.substring(0, 100)}`);
+          }
+
+          const data = await response.json();
+          console.log(`        📈 P2P ${tradeType} Page ${page} Data keys:`, Object.keys(data));
+
+          if (data.code && data.code !== 200) {
+            console.log(`        ❌ P2P ${tradeType} API Error: ${data.msg}`);
+            throw new Error(`Binance P2P error: ${data.msg}`);
+          }
+
+          if (!data.data) {
+            console.log(`        ℹ️ P2P ${tradeType} Page ${page}: No data field found`);
+            hasMoreData = false;
+            break;
+          }
+
+          const orders = data.data;
+          console.log(`        📊 P2P ${tradeType} Page ${page} Orders: ${orders.length}`);
+
+          if (orders.length === 0) {
+            hasMoreData = false;
+            break;
+          }
+
+          // Process orders
+          const pageTransactions = orders.filter(order => {
+            if (!order.createTime) return false;
+            
+            const orderDate = new Date(parseInt(order.createTime));
+            const isCompleted = order.orderStatus === "COMPLETED";
+            
+            return orderDate >= filterDate && isCompleted;
+          }).map(order => ({
+            platform: account.name,
+            type: tradeType === 'BUY' ? "deposit" : "withdrawal",
+            asset: order.asset,
+            amount: (order.amount || order.totalAmount || order.quantity || "0").toString(),
+            timestamp: new Date(parseInt(order.createTime)).toISOString(),
+            from_address: tradeType === 'BUY' ? "P2P User" : account.name,
+            to_address: tradeType === 'BUY' ? account.name : "P2P User",
+            tx_id: `P2P_${order.orderNumber}`,
+            status: "Completed",
+            network: "P2P",
+            api_source: `Binance_P2P_${tradeType}_Official`
+          }));
+
+          transactions.push(...pageTransactions);
+          console.log(`        ✅ P2P ${tradeType} Page ${page}: Added ${pageTransactions.length} transactions`);
+
+          // Check if we need more pages
+          if (orders.length < 100) {
+            hasMoreData = false;
+          } else {
+            page++;
+          }
         }
-        
-      } catch (endpointError) {
-        console.log(`      ❌ ${endpointConfig.name} failed: ${endpointError.message}`);
+
+      } catch (tradeTypeError) {
+        console.log(`      ❌ P2P ${tradeType} failed: ${tradeTypeError.message}`);
       }
     }
+    
+    console.log(`    ✅ P2P Total for ${account.name}: ${transactions.length} transactions`);
     
   } catch (error) {
     console.log(`    ❌ P2P fetch failed for ${account.name}: ${error.message}`);
