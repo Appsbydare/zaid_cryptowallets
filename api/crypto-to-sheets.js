@@ -879,18 +879,14 @@ async function fetchBinancePayEnhanced(account, filterDate) {
   }
 }
 
-// ===========================================
-// ENHANCED BYBIT WITH V5 AUTHENTICATION FIX
-// ===========================================
-
 async function testByBitAccountEnhanced(config, filterDate) {
   try {
-    console.log(`🔥 Processing ByBit ${config.name} with ENHANCED V5 authentication...`);
+    console.log(`🔥 Processing ByBit ${config.name} with ENHANCED V5 + FIXES...`);
     
-    // Test multiple authentication methods for ByBit V5
+    // Test multiple authentication methods with SPOT as priority
     const authMethods = [
+      { name: "Spot Account", accountType: "SPOT" },      // Try SPOT first
       { name: "Unified Account", accountType: "UNIFIED" },
-      { name: "Spot Account", accountType: "SPOT" },
       { name: "Contract Account", accountType: "CONTRACT" }
     ];
 
@@ -966,13 +962,13 @@ async function testByBitAccountEnhanced(config, filterDate) {
     };
 
     try {
-      // Fetch deposits with working account type
+      // Fetch deposits with FIXED function
       const deposits = await fetchByBitDepositsEnhanced(config, filterDate, workingAccountType);
       transactions.push(...deposits);
       transactionBreakdown.deposits = deposits.length;
       console.log(`  💰 ${config.name} deposits: ${deposits.length}`);
 
-      // Fetch withdrawals with working account type
+      // Fetch withdrawals (existing function should work)
       const withdrawals = await fetchByBitWithdrawalsEnhanced(config, filterDate, workingAccountType);
       transactions.push(...withdrawals);
       transactionBreakdown.withdrawals = withdrawals.length;
@@ -982,7 +978,7 @@ async function testByBitAccountEnhanced(config, filterDate) {
       console.log(`ByBit transaction fetch failed: ${txError.message}`);
     }
 
-    const statusNotes = `🔥 Connected (${workingAccountType}): ${transactionBreakdown.deposits}D + ${transactionBreakdown.withdrawals}W = ${transactions.length} total`;
+    const statusNotes = `🔥 FIXED (${workingAccountType}): ${transactionBreakdown.deposits}D + ${transactionBreakdown.withdrawals}W = ${transactions.length} total`;
 
     return {
       success: true,
@@ -1004,77 +1000,149 @@ async function testByBitAccountEnhanced(config, filterDate) {
         status: 'Error',
         lastSync: new Date().toISOString(),
         autoUpdate: 'Every Hour',
-        notes: `❌ Enhanced ByBit failed: ${error.message}`,
+        notes: `❌ Enhanced ByBit FIXED failed: ${error.message}`,
         transactionCount: 0
       }
     };
   }
 }
 
+// =============================================
+// FIXED BYBIT DEPOSIT FUNCTIONS - WITH COIN PARAMETER & INTERNAL DEPOSITS
+// =============================================
+
 async function fetchByBitDepositsEnhanced(config, filterDate, accountType = "UNIFIED") {
   try {
-    console.log(`    💰 Fetching ByBit deposits for ${config.name} (${accountType})...`);
+    console.log(`    💰 Fetching ByBit deposits for ${config.name} (${accountType}) with FIXES...`);
     
-    const timestamp = Date.now().toString();
-    const recv_window = "5000";
-    const endpoint = "https://api.bybit.com/v5/asset/deposit/query-record";
+    let allDeposits = [];
     
-    const queryParams = `timestamp=${timestamp}&limit=50&startTime=${filterDate.getTime()}`;
-    const signString = timestamp + config.apiKey + recv_window + queryParams;
-    const signature = crypto.createHmac('sha256', config.apiSecret).update(signString).digest('hex');
-    const url = `${endpoint}?${queryParams}`;
+    // Major coins to check (required for UNIFIED accounts)
+    const coinsToCheck = ['USDT', 'BTC', 'ETH', 'SOL', 'BNB', 'USDC', 'TRX'];
+    
+    // Method 1: External deposits (on-chain) with coin parameter
+    for (const coin of coinsToCheck) {
+      try {
+        console.log(`      🪙 Checking external deposits for ${coin}...`);
+        
+        const timestamp = Date.now().toString();
+        const recv_window = "5000";
+        const endpoint = "https://api.bybit.com/v5/asset/deposit/query-record";
+        
+        const queryParams = `coin=${coin}&timestamp=${timestamp}&limit=50&startTime=${filterDate.getTime()}`;
+        const signString = timestamp + config.apiKey + recv_window + queryParams;
+        const signature = crypto.createHmac('sha256', config.apiSecret).update(signString).digest('hex');
+        const url = `${endpoint}?${queryParams}`;
 
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "X-BAPI-API-KEY": config.apiKey,
-        "X-BAPI-SIGN": signature,
-        "X-BAPI-TIMESTAMP": timestamp,
-        "X-BAPI-RECV-WINDOW": recv_window,
-        "Content-Type": "application/json"
+        const response = await fetch(url, {
+          method: "GET",
+          headers: {
+            "X-BAPI-API-KEY": config.apiKey,
+            "X-BAPI-SIGN": signature,
+            "X-BAPI-TIMESTAMP": timestamp,
+            "X-BAPI-RECV-WINDOW": recv_window,
+            "Content-Type": "application/json"
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          
+          if (data.retCode === 0 && data.result?.rows) {
+            const deposits = data.result.rows.filter(deposit => {
+              const depositDate = new Date(parseInt(deposit.successAt));
+              return depositDate >= filterDate && deposit.status === "3"; // Status 3 = success
+            }).map(deposit => ({
+              platform: config.name,
+              type: "deposit",
+              asset: deposit.coin,
+              amount: deposit.amount.toString(),
+              timestamp: new Date(parseInt(deposit.successAt)).toISOString(),
+              from_address: deposit.toAddress || "External",
+              to_address: config.name,
+              tx_id: deposit.txID || deposit.id,
+              status: "Completed",
+              network: deposit.chain,
+              api_source: "ByBit_Deposit_V5_External_Fixed"
+            }));
+            
+            allDeposits.push(...deposits);
+            console.log(`        ✅ ${coin} external deposits: ${deposits.length}`);
+          }
+        } else {
+          console.log(`        ⚠️ ${coin} external deposits failed: ${response.status}`);
+        }
+
+      } catch (coinError) {
+        console.log(`        ❌ ${coin} external deposits error: ${coinError.message}`);
       }
-    });
-
-    if (!response.ok) {
-      throw new Error(`ByBit deposits API error: ${response.status}`);
     }
 
-    const data = await response.json();
-    
-    if (data.retCode !== 0) {
-      throw new Error(`ByBit deposits error: ${data.retMsg}`);
+    // Method 2: Internal deposits (off-chain, within Bybit platform)
+    try {
+      console.log(`      🔄 Checking internal deposits (off-chain)...`);
+      
+      const timestamp = Date.now().toString();
+      const recv_window = "5000";
+      const endpoint = "https://api.bybit.com/v5/asset/deposit/query-internal-record";
+      
+      const queryParams = `timestamp=${timestamp}&limit=50&startTime=${filterDate.getTime()}`;
+      const signString = timestamp + config.apiKey + recv_window + queryParams;
+      const signature = crypto.createHmac('sha256', config.apiSecret).update(signString).digest('hex');
+      const url = `${endpoint}?${queryParams}`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "X-BAPI-API-KEY": config.apiKey,
+          "X-BAPI-SIGN": signature,
+          "X-BAPI-TIMESTAMP": timestamp,
+          "X-BAPI-RECV-WINDOW": recv_window,
+          "Content-Type": "application/json"
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (data.retCode === 0 && data.result?.rows) {
+          const internalDeposits = data.result.rows.filter(deposit => {
+            const depositDate = new Date(parseInt(deposit.successAt));
+            return depositDate >= filterDate && deposit.status === "SUCCESS";
+          }).map(deposit => ({
+            platform: config.name,
+            type: "deposit",
+            asset: deposit.coin,
+            amount: deposit.amount.toString(),
+            timestamp: new Date(parseInt(deposit.successAt)).toISOString(),
+            from_address: "Bybit Internal",
+            to_address: config.name,
+            tx_id: `INTERNAL_${deposit.id}`,
+            status: "Completed",
+            network: "Internal",
+            api_source: "ByBit_Deposit_V5_Internal_Fixed"
+          }));
+          
+          allDeposits.push(...internalDeposits);
+          console.log(`        ✅ Internal deposits: ${internalDeposits.length}`);
+        }
+      } else {
+        console.log(`        ⚠️ Internal deposits failed: ${response.status}`);
+      }
+
+    } catch (internalError) {
+      console.log(`        ❌ Internal deposits error: ${internalError.message}`);
     }
 
-    if (!data.result || !data.result.rows) {
-      console.log(`    ℹ️ No deposit data returned for ${config.name}`);
-      return [];
-    }
-
-    const deposits = data.result.rows.filter(deposit => {
-      const depositDate = new Date(parseInt(deposit.successAt));
-      return depositDate >= filterDate && deposit.status === "3"; // Status 3 = success
-    }).map(deposit => ({
-      platform: config.name,
-      type: "deposit",
-      asset: deposit.coin,
-      amount: deposit.amount.toString(),
-      timestamp: new Date(parseInt(deposit.successAt)).toISOString(),
-      from_address: deposit.toAddress || "External",
-      to_address: config.name,
-      tx_id: deposit.txID || deposit.id,
-      status: "Completed",
-      network: deposit.chain,
-      api_source: "ByBit_Deposit_V5_Enhanced"
-    }));
-
-    console.log(`    ✅ ByBit deposits: ${deposits.length} transactions`);
-    return deposits;
+    console.log(`    ✅ ByBit total deposits: ${allDeposits.length} transactions`);
+    return allDeposits;
 
   } catch (error) {
-    console.error(`Error fetching ByBit deposits for ${config.name}:`, error);
+    console.error(`Error fetching FIXED ByBit deposits for ${config.name}:`, error);
     return [];
   }
 }
+
 
 async function fetchByBitWithdrawalsEnhanced(config, filterDate, accountType = "UNIFIED") {
   try {
