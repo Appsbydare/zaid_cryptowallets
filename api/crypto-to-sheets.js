@@ -1786,32 +1786,46 @@ async function writeToGoogleSheetsWithStatus(transactions, apiStatus) {
     let depositsAdded = 0;
 
     // Write withdrawals
-    if (sortedWithdrawals.length > 0) {
-      const withdrawalRows = sortedWithdrawals.map(tx => [
-        tx.platform, tx.asset, parseFloat(tx.amount).toFixed(8),
-        formatDateTimeSimple(tx.timestamp), tx.from_address, tx.to_address, tx.tx_id
-      ]);
-    
-      await sheets.spreadsheets.values.append({
-        spreadsheetId,
-        range: 'Withdrawals!F:L',
-        valueInputOption: 'RAW',
-        requestBody: { values: withdrawalRows }
-      });
-      
+      if (sortedWithdrawals.length > 0) {
+    const withdrawalRows = sortedWithdrawals.map(tx => [
+      tx.platform, tx.asset, parseFloat(tx.amount).toFixed(8),
+      formatDateTimeSimple(tx.timestamp), tx.from_address, tx.to_address, tx.tx_id
+    ]);
+  
+    // Get current last row based on column F data
+    const lastRow = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'Withdrawals!F:F'
+    });
+    const nextRow = (lastRow.data.values?.length || 0) + 1;
+  
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `Withdrawals!F${nextRow}:L${nextRow + withdrawalRows.length - 1}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: withdrawalRows }
+    });
+        
       withdrawalsAdded = sortedWithdrawals.length;
       console.log(`✅ APPENDED ${withdrawalsAdded} withdrawals at bottom`);
     }
     // Write deposits
-    if (sortedDeposits.length > 0) {
+      if (sortedDeposits.length > 0) {
     const depositRows = sortedDeposits.map(tx => [
       tx.platform, tx.asset, parseFloat(tx.amount).toFixed(8),
       formatDateTimeSimple(tx.timestamp), tx.from_address, tx.to_address, tx.tx_id
     ]);
   
-    await sheets.spreadsheets.values.append({
+    // Get current last row based on column F data
+    const lastRow = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Deposits!F:L',
+      range: 'Deposits!F:F'
+    });
+    const nextRow = (lastRow.data.values?.length || 0) + 1;
+  
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `Deposits!F${nextRow}:L${nextRow + depositRows.length - 1}`,
       valueInputOption: 'RAW',
       requestBody: { values: depositRows }
     });
