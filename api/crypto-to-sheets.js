@@ -248,38 +248,17 @@ export default async function handler(req, res) {
     res.status(200).json({
       success: true,
       message: 'FIXED data processing completed',
-      transactions: allTransactions.length,
-      totalFound: totalTransactionsFound,
-      dateFilter: startDate,
+      totalTransactions: totalTransactionsFound,
       sheetsResult: sheetsResult,
-      apiStatus: apiStatusResults,
-      deduplicationStats: {
-        rawTransactions: allTransactions.length,
-        afterDeduplication: sheetsResult.totalAfterDedup || 0,
-        afterValueFilter: sheetsResult.totalAfterFilter || 0,
-        duplicatesRemoved: sheetsResult.duplicatesRemoved || 0,
-        valueFiltered: sheetsResult.filteredOut || 0,
-        recycleBinSaved: sheetsResult.recycleBinSaved || 0,
-        unknownCurrencies: sheetsResult.unknownCurrencies || [],
-        finalAdded: (sheetsResult.withdrawalsAdded || 0) + (sheetsResult.depositsAdded || 0)
-      },
-      summary: {
-        binanceAccounts: Object.keys(apiStatusResults).filter(k => k.includes('Binance')).length,
-        blockchainWallets: Object.keys(apiStatusResults).filter(k => k.includes('Wallet')).length,
-        activeAPIs: Object.values(apiStatusResults).filter(s => s.status === 'Active').length,
-        errorAPIs: Object.values(apiStatusResults).filter(s => s.status === 'Error').length,
-        fixedFeatures: 'ByBit V5 + Binance P2P + Extended Currencies + Google Sheets Fix'
-      },
-      timestamp: new Date().toISOString()
+      apiStatus: apiStatusResults
     });
 
   } catch (error) {
-    console.error('❌ Fixed Vercel Error:', error);
-    
+    console.error('❌ FIXED processing failed:', error);
     res.status(500).json({
       success: false,
-      error: error.message,
-      timestamp: new Date().toISOString()
+      message: 'FIXED processing failed',
+      error: error.message
     });
   }
 }
@@ -1309,4 +1288,174 @@ function filterTransactionsByValueFixed(transactions) {
     if (!priceAED) {
       priceAED = 1.0;
       unknownCurrencies.add(tx.asset);
-      console.log(`
+      console.log(`⚠️ Unknown currency: ${tx.asset}, using 1 AED default`);
+    }
+    
+    const valueAED = amount * priceAED;
+    const keep = valueAED >= minValueAED;
+    
+    if (!keep) {
+      filteredCount++;
+    }
+    
+    return keep;
+  });
+
+  console.log(`💰 Value Filter: ${totalCount} → ${keepTransactions.length} transactions (removed ${filteredCount} < ${minValueAED} AED)`);
+  
+  if (unknownCurrencies.size > 0) {
+    console.log(`⚠️ Unknown currencies found: ${Array.from(unknownCurrencies).join(', ')}`);
+  }
+  
+  return {
+    transactions: keepTransactions,
+    filteredOut: filteredCount,
+    unknownCurrencies: Array.from(unknownCurrencies)
+  };
+}
+
+// ===========================================
+// FIXED GOOGLE SHEETS WRITING
+// ===========================================
+
+async function writeToGoogleSheetsFixed(transactions, apiStatusResults) {
+  try {
+    console.log('🔑 Setting up Google Sheets authentication...');
+    
+    const auth = new GoogleAuth({
+      credentials: {
+        client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+
+    const sheets = google.sheets({ version: 'v4', auth });
+    const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+
+    // 1. Get existing transaction IDs
+    const existingTxIds = await getExistingTransactionIds(sheets, spreadsheetId);
+    
+    // 2. Remove duplicates
+    const uniqueTransactions = removeDuplicateTransactions(transactions, existingTxIds);
+    
+    // 3. Filter by value
+    const { transactions: filteredTransactions, filteredOut, unknownCurrencies } = filterTransactionsByValueFixed(uniqueTransactions);
+    
+    // 4. Sort by timestamp
+    filteredTransactions.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    
+    // 5. Split into deposits and withdrawals
+    const deposits = filteredTransactions.filter(tx => tx.type === 'deposit');
+    const withdrawals = filteredTransactions.filter(tx => tx.type === 'withdrawal');
+    
+    // 6. Write to sheets
+    let withdrawalsAdded = 0;
+    let depositsAdded = 0;
+    
+    if (withdrawals.length > 0) {
+      const withdrawalsRange = 'Withdrawals!F7:L1000';
+      const withdrawalsData = withdrawals.map(tx => [
+        tx.platform,
+        tx.asset,
+        tx.amount,
+        tx.timestamp,
+        tx.from_address,
+        tx.to_address,
+        tx.tx_id
+      ]);
+      
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: withdrawalsRange,
+        valueInputOption: 'USER_ENTERED',
+        resource: { values: withdrawalsData }
+      });
+      
+      withdrawalsAdded = withdrawals.length;
+      console.log(`📤 WROTE ${withdrawals.length} withdrawals to F51:L76`);
+    }
+    
+    if (deposits.length > 0) {
+      const depositsRange = 'Deposits!F7:L1000';
+      const depositsData = deposits.map(tx => [
+        tx.platform,
+        tx.asset,
+        tx.amount,
+        tx.timestamp,
+        tx.from_address,
+        tx.to_address,
+        tx.tx_id
+      ]);
+      
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: depositsRange,
+        valueInputOption: 'USER_ENTERED',
+        resource: { values: depositsData }
+      });
+      
+      depositsAdded = deposits.length;
+      console.log(`📥 WROTE ${deposits.length} deposits to F70:L104`);
+    }
+    
+    // 7. Update settings status
+    await updateSettingsStatusOnly(apiStatusResults);
+    
+    return {
+      success: true,
+      withdrawalsAdded,
+      depositsAdded,
+      statusUpdated: true,
+      totalRaw: transactions.length,
+      totalAfterDedup: uniqueTransactions.length,
+      totalAfterFilter: filteredTransactions.length,
+      duplicatesRemoved: transactions.length - uniqueTransactions.length,
+      filteredOut,
+      recycleBinSaved: 0,
+      unknownCurrencies,
+      safetyNote: 'Only wrote new transactions to F:L columns - existing accountant data (A:E) untouched'
+    };
+    
+  } catch (error) {
+    console.error('❌ Google Sheets write failed:', error);
+    throw error;
+  }
+}
+
+async function updateSettingsStatusOnly(apiStatusResults) {
+  try {
+    const auth = new GoogleAuth({
+      credentials: {
+        client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+
+    const sheets = google.sheets({ version: 'v4', auth });
+    const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+    
+    const statusRange = 'Settings!B2:E10';
+    const statusData = Object.entries(apiStatusResults).map(([name, status]) => [
+      name,
+      status.status,
+      status.lastSync,
+      status.notes
+    ]);
+    
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: statusRange,
+      valueInputOption: 'USER_ENTERED',
+      resource: { values: statusData }
+    });
+    
+    console.log('📊 Updated Settings status table...');
+    return true;
+    
+  } catch (error) {
+    console.error('❌ Status update failed:', error);
+    throw error;
+  }
+}
