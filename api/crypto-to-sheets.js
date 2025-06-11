@@ -554,6 +554,7 @@ async function fetchBinanceP2PFixed(account, filterDate) {
       try {
         console.log(`      🔧 Fetching P2P ${tradeType} orders...`);
         
+        // Method 1: Using authenticated API
         const timestamp = Date.now();
         const endpoint = "https://api.binance.com/sapi/v1/c2c/orderMatch/listUserOrderHistory";
         const params = {
@@ -578,6 +579,14 @@ async function fetchBinanceP2PFixed(account, filterDate) {
         if (!response.ok) {
           const errorText = await response.text();
           console.log(`        ❌ P2P ${tradeType} API Error: ${response.status} - ${errorText}`);
+          
+          // Method 2: Try P2P listings API as backup
+          console.log(`        🔄 Trying P2P listings API as backup...`);
+          const p2pListings = await fetchBinanceP2PListings(tradeType);
+          if (p2pListings.length > 0) {
+            console.log(`        ✅ P2P listings found: ${p2pListings.length}`);
+            transactions.push(...p2pListings);
+          }
           continue;
         }
 
@@ -630,6 +639,77 @@ async function fetchBinanceP2PFixed(account, filterDate) {
   }
   
   return transactions;
+}
+
+// New function to fetch P2P listings
+async function fetchBinanceP2PListings(tradeType) {
+  try {
+    const url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search";
+    
+    const headers = {
+      "Accept": "*/*",
+      "Accept-Encoding": "gzip, deflate, br",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    };
+
+    // Try multiple assets
+    const assets = ["USDT", "BTC", "BNB"];
+    const transactions = [];
+
+    for (const asset of assets) {
+      const data = {
+        asset: asset,
+        fiat: "USD",
+        merchantCheck: false,
+        page: 1,
+        payTypes: [],
+        publisherType: null,
+        rows: 50,
+        tradeType: tradeType
+      };
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        console.log(`        ❌ P2P listings API error for ${asset}: ${response.status}`);
+        continue;
+      }
+
+      const result = await response.json();
+      
+      if (result.data && Array.isArray(result.data)) {
+        const listings = result.data.map(listing => ({
+          platform: "Binance P2P",
+          type: tradeType === 'BUY' ? "deposit" : "withdrawal",
+          asset: asset,
+          amount: listing.adv.price,
+          timestamp: new Date().toISOString(),
+          from_address: tradeType === 'BUY' ? "P2P User" : "Binance P2P",
+          to_address: tradeType === 'BUY' ? "Binance P2P" : "P2P User",
+          tx_id: `P2P_LISTING_${listing.adv.advNo}`,
+          status: "Active",
+          network: "P2P",
+          api_source: "Binance_P2P_Listings"
+        }));
+
+        transactions.push(...listings);
+      }
+    }
+
+    return transactions;
+
+  } catch (error) {
+    console.log(`        ❌ P2P listings fetch failed: ${error.message}`);
+    return [];
+  }
 }
 
 // ===========================================
@@ -1792,5 +1872,4 @@ function createQueryString(params) {
 function formatDateTimeSimple(isoString) {
   const date = new Date(isoString);
   return date.toISOString().slice(0, 16).replace('T', ' ');
-  
 }
