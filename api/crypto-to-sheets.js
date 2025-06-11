@@ -248,17 +248,38 @@ export default async function handler(req, res) {
     res.status(200).json({
       success: true,
       message: 'FIXED data processing completed',
-      totalTransactions: totalTransactionsFound,
+      transactions: allTransactions.length,
+      totalFound: totalTransactionsFound,
+      dateFilter: startDate,
       sheetsResult: sheetsResult,
-      apiStatus: apiStatusResults
+      apiStatus: apiStatusResults,
+      deduplicationStats: {
+        rawTransactions: allTransactions.length,
+        afterDeduplication: sheetsResult.totalAfterDedup || 0,
+        afterValueFilter: sheetsResult.totalAfterFilter || 0,
+        duplicatesRemoved: sheetsResult.duplicatesRemoved || 0,
+        valueFiltered: sheetsResult.filteredOut || 0,
+        recycleBinSaved: sheetsResult.recycleBinSaved || 0,
+        unknownCurrencies: sheetsResult.unknownCurrencies || [],
+        finalAdded: (sheetsResult.withdrawalsAdded || 0) + (sheetsResult.depositsAdded || 0)
+      },
+      summary: {
+        binanceAccounts: Object.keys(apiStatusResults).filter(k => k.includes('Binance')).length,
+        blockchainWallets: Object.keys(apiStatusResults).filter(k => k.includes('Wallet')).length,
+        activeAPIs: Object.values(apiStatusResults).filter(s => s.status === 'Active').length,
+        errorAPIs: Object.values(apiStatusResults).filter(s => s.status === 'Error').length,
+        fixedFeatures: 'ByBit V5 + Binance P2P + Extended Currencies + Google Sheets Fix'
+      },
+      timestamp: new Date().toISOString()
     });
 
   } catch (error) {
-    console.error('❌ FIXED processing failed:', error);
+    console.error('❌ Fixed Vercel Error:', error);
+    
     res.status(500).json({
       success: false,
-      message: 'FIXED processing failed',
-      error: error.message
+      error: error.message,
+      timestamp: new Date().toISOString()
     });
   }
 }
@@ -269,8 +290,72 @@ export default async function handler(req, res) {
 
 async function testBinanceAccountFixed(account, filterDate) {
   try {
-    console.log(`🔧 Processing Binance (${account.name}) with FIXES...`);
+    const timestamp = Date.now();
     
+    // Test with account info first
+    const endpoint = "https://api.binance.com/api/v3/account";
+    const params = {
+      timestamp: timestamp,
+      recvWindow: 5000
+    };
+
+    const signature = createBinanceSignature(params, account.apiSecret);
+    const queryString = createQueryString(params);
+    const url = `${endpoint}?${queryString}&signature=${signature}`;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "X-MBX-APIKEY": account.apiKey,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      }
+    });
+
+    if (response.status === 451) {
+      return {
+        success: false,
+        transactions: [],
+        status: {
+          status: 'Error',
+          lastSync: new Date().toISOString(),
+          autoUpdate: 'Every Hour',
+          notes: '❌ Geo-blocked (451)',
+          transactionCount: 0
+        }
+      };
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return {
+        success: false,
+        transactions: [],
+        status: {
+          status: 'Error',
+          lastSync: new Date().toISOString(),
+          autoUpdate: 'Every Hour',
+          notes: `❌ HTTP ${response.status}: ${errorText.substring(0, 50)}`,
+          transactionCount: 0
+        }
+      };
+    }
+
+    const data = await response.json();
+    
+    if (data.code && data.code !== 200) {
+      return {
+        success: false,
+        transactions: [],
+        status: {
+          status: 'Error',
+          lastSync: new Date().toISOString(),
+          autoUpdate: 'Every Hour',
+          notes: `❌ API error: ${data.msg}`,
+          transactionCount: 0
+        }
+      };
+    }
+
     // Get transactions with FIXED endpoints
     let transactions = [];
     let transactionBreakdown = {
@@ -310,7 +395,7 @@ async function testBinanceAccountFixed(account, filterDate) {
     }
 
     const statusNotes = `🔧 FIXED: ${transactionBreakdown.deposits}D + ${transactionBreakdown.withdrawals}W + ${transactionBreakdown.p2p}P2P + ${transactionBreakdown.pay}Pay = ${transactions.length} total`;
-    
+
     return {
       success: true,
       transactions: transactions,
@@ -331,7 +416,7 @@ async function testBinanceAccountFixed(account, filterDate) {
         status: 'Error',
         lastSync: new Date().toISOString(),
         autoUpdate: 'Every Hour',
-        notes: `❌ Binance FIXED failed: ${error.message}`,
+        notes: `❌ ${error.message}`,
         transactionCount: 0
       }
     };
@@ -464,27 +549,18 @@ async function fetchBinanceP2PFixed(account, filterDate) {
   try {
     console.log(`    🤝 Fetching P2P transactions for ${account.name} using FIXED endpoint...`);
     
-    // FIXED: Only use the working P2P endpoint
-    const endTime = Date.now();
-    const startTime = Math.max(filterDate.getTime(), endTime - (30 * 24 * 60 * 60 * 1000));
-    
-    const tradeTypes = ['BUY', 'SELL'];
-    
-    for (const tradeType of tradeTypes) {
+    // Process both BUY and SELL orders
+    for (const tradeType of ['BUY', 'SELL']) {
       try {
         console.log(`      🔧 Fetching P2P ${tradeType} orders...`);
         
         const timestamp = Date.now();
         const endpoint = "https://api.binance.com/sapi/v1/c2c/orderMatch/listUserOrderHistory";
-        
         const params = {
           tradeType: tradeType,
-          startTimestamp: startTime,
-          endTimestamp: endTime,
-          page: 1,
-          rows: 50, // FIXED: Reduced to safe limit
           timestamp: timestamp,
-          recvWindow: 5000
+          recvWindow: 5000,
+          limit: 100
         };
 
         const signature = createBinanceSignature(params, account.apiSecret);
@@ -500,11 +576,9 @@ async function fetchBinanceP2PFixed(account, filterDate) {
         });
 
         if (!response.ok) {
-          if (response.status === 451) {
-            console.log(`        🚫 P2P API geo-blocked for ${account.name}`);
-            break;
-          }
-          throw new Error(`P2P API error: ${response.status}`);
+          const errorText = await response.text();
+          console.log(`        ❌ P2P ${tradeType} API Error: ${response.status} - ${errorText}`);
+          continue;
         }
 
         const data = await response.json();
@@ -1288,174 +1362,435 @@ function filterTransactionsByValueFixed(transactions) {
     if (!priceAED) {
       priceAED = 1.0;
       unknownCurrencies.add(tx.asset);
-      console.log(`⚠️ Unknown currency: ${tx.asset}, using 1 AED default`);
+      console.log(`⚠️ Unknown currency ${tx.asset} - using 1 AED default`);
     }
     
-    const valueAED = amount * priceAED;
-    const keep = valueAED >= minValueAED;
+    const aedValue = amount * priceAED;
+    const keepTransaction = aedValue >= minValueAED;
     
-    if (!keep) {
+    if (!keepTransaction) {
       filteredCount++;
+      filteredTransactions.push({
+        ...tx,
+        calculated_aed_value: aedValue,
+        used_default_rate: !pricesAED[tx.asset],
+        filter_reason: `Value ${aedValue.toFixed(2)} AED < ${minValueAED} AED minimum`
+      });
     }
     
-    return keep;
+    return keepTransaction;
   });
 
-  console.log(`💰 Value Filter: ${totalCount} → ${keepTransactions.length} transactions (removed ${filteredCount} < ${minValueAED} AED)`);
-  
+  console.log(`💰 Value Filter: ${totalCount} → ${keepTransactions.length} transactions (removed ${filteredCount} < 3.6 AED)`);
   if (unknownCurrencies.size > 0) {
-    console.log(`⚠️ Unknown currencies found: ${Array.from(unknownCurrencies).join(', ')}`);
+    console.log(`⚠️ Unknown currencies using 1 AED default: ${Array.from(unknownCurrencies).join(', ')}`);
   }
   
   return {
     transactions: keepTransactions,
-    filteredOut: filteredCount,
+    filteredOut: filteredTransactions,
     unknownCurrencies: Array.from(unknownCurrencies)
   };
 }
 
+function sortTransactionsByTimestamp(transactions) {
+  console.log(`⏰ Sorting ${transactions.length} NEW transactions by timestamp (ascending)...`);
+  
+  const sorted = [...transactions].sort((a, b) => {
+    const dateA = new Date(a.timestamp);
+    const dateB = new Date(b.timestamp);
+    return dateA - dateB;
+  });
+  
+  if (sorted.length > 0) {
+    const oldestDate = new Date(sorted[0].timestamp).toISOString().slice(0, 16);
+    const newestDate = new Date(sorted[sorted.length - 1].timestamp).toISOString().slice(0, 16);
+    console.log(`📅 Date range: ${oldestDate} → ${newestDate} (${sorted.length} transactions)`);
+  }
+  
+  return sorted;
+}
+
+async function saveToRecycleBin(sheets, spreadsheetId, filteredTransactions) {
+  if (filteredTransactions.length === 0) {
+    console.log('📁 No transactions to save to RecycleBin');
+    return 0;
+  }
+
+  try {
+    console.log(`📁 Saving ${filteredTransactions.length} filtered transactions to RecycleBin...`);
+    
+    // Check if RecycleBin sheet exists
+    try {
+      const sheetMetadata = await sheets.spreadsheets.get({
+        spreadsheetId: spreadsheetId
+      });
+      
+      const recycleBinExists = sheetMetadata.data.sheets.some(
+        sheet => sheet.properties.title === 'RecycleBin'
+      );
+      
+      if (!recycleBinExists) {
+        console.log('📁 Creating RecycleBin sheet...');
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId: spreadsheetId,
+          requestBody: {
+            requests: [{
+              addSheet: {
+                properties: {
+                  title: 'RecycleBin'
+                }
+              }
+            }]
+          }
+        });
+        
+        // Add headers
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: 'RecycleBin!A1:M1',
+          valueInputOption: 'RAW',
+          requestBody: {
+            values: [[
+              'Date & Time', 'Platform', 'Type', 'Asset', 'Amount', 
+              'Calculated AED', 'Used Default Rate', 'Filter Reason',
+              'From Address', 'To Address', 'TX ID', 'Status', 'Network'
+            ]]
+          }
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error checking/creating RecycleBin sheet:', error);
+      return 0;
+    }
+
+    // Get existing RecycleBin data to avoid duplicates
+    let existingTxIds = new Set();
+    try {
+      const existingData = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: 'RecycleBin!A2:M1000'
+      });
+      
+      if (existingData.data.values) {
+        existingData.data.values.forEach(row => {
+          if (row[10]) {
+            existingTxIds.add(row[10].toString().trim());
+          }
+        });
+      }
+    } catch (error) {
+      console.log('⚠️ Could not read existing RecycleBin data (might be empty)');
+    }
+
+    // Filter out duplicates
+    const newFilteredTransactions = filteredTransactions.filter(tx => {
+      const txId = tx.tx_id?.toString().trim();
+      return txId && !existingTxIds.has(txId);
+    });
+
+    if (newFilteredTransactions.length === 0) {
+      console.log('📁 All filtered transactions already exist in RecycleBin');
+      return 0;
+    }
+
+    // Prepare rows for RecycleBin
+    const recycleBinRows = newFilteredTransactions.map(tx => [
+      formatDateTimeSimple(tx.timestamp),
+      tx.platform,
+      tx.type,
+      tx.asset,
+      parseFloat(tx.amount).toFixed(8),
+      tx.calculated_aed_value?.toFixed(2) || '0.00',
+      tx.used_default_rate ? 'YES' : 'NO',
+      tx.filter_reason || 'Unknown',
+      tx.from_address || '',
+      tx.to_address || '',
+      tx.tx_id || '',
+      tx.status || 'Unknown',
+      tx.network || ''
+    ]);
+
+    // Append to RecycleBin
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: 'RecycleBin!A:M',
+      valueInputOption: 'RAW',
+      requestBody: { values: recycleBinRows }
+    });
+
+    console.log(`✅ Saved ${newFilteredTransactions.length} new transactions to RecycleBin`);
+    return newFilteredTransactions.length;
+
+  } catch (error) {
+    console.error('❌ Error saving to RecycleBin:', error);
+    return 0;
+  }
+}
+
 // ===========================================
-// FIXED GOOGLE SHEETS WRITING
+// FIXED GOOGLE SHEETS FUNCTIONS
 // ===========================================
 
-async function writeToGoogleSheetsFixed(transactions, apiStatusResults) {
+async function writeToGoogleSheetsFixed(transactions, apiStatus) {
   try {
     console.log('🔑 Setting up Google Sheets authentication...');
     
+    const credentials = {
+      type: "service_account",
+      project_id: process.env.GOOGLE_PROJECT_ID,
+      private_key_id: process.env.GOOGLE_PRIVATE_KEY_ID,
+      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      client_email: process.env.GOOGLE_CLIENT_EMAIL,
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      auth_uri: "https://accounts.google.com/o/oauth2/auth",
+      token_uri: "https://oauth2.googleapis.com/token",
+      auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+      client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${process.env.GOOGLE_CLIENT_EMAIL}`
+    };
+
     const auth = new GoogleAuth({
-      credentials: {
-        client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n')
-      },
+      credentials: credentials,
       scopes: ['https://www.googleapis.com/auth/spreadsheets']
     });
 
     const sheets = google.sheets({ version: 'v4', auth });
-    const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+    const spreadsheetId = '1pLsxrfU5NgHF4aNLXNnCCvGgBvKO4EKjb44iiVvUp5Q';
 
-    // 1. Get existing transaction IDs
+    console.log(`📊 Starting with ${transactions.length} raw transactions`);
+
     const existingTxIds = await getExistingTransactionIds(sheets, spreadsheetId);
-    
-    // 2. Remove duplicates
     const uniqueTransactions = removeDuplicateTransactions(transactions, existingTxIds);
     
-    // 3. Filter by value
-    const { transactions: filteredTransactions, filteredOut, unknownCurrencies } = filterTransactionsByValueFixed(uniqueTransactions);
+    // FIXED: Use new filtering function
+    const filterResult = filterTransactionsByValueFixed(uniqueTransactions);
+    const filteredTransactions = filterResult.transactions;
+    const rejectedTransactions = filterResult.filteredOut;
+    const unknownCurrencies = filterResult.unknownCurrencies;
     
-    // 4. Sort by timestamp
-    filteredTransactions.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    
-    // 5. Split into deposits and withdrawals
-    const deposits = filteredTransactions.filter(tx => tx.type === 'deposit');
-    const withdrawals = filteredTransactions.filter(tx => tx.type === 'withdrawal');
-    
-    // 6. Write to sheets
+    const sortedTransactions = sortTransactionsByTimestamp(filteredTransactions);
+
+    console.log(`🎯 Final result: ${transactions.length} → ${sortedTransactions.length} NEW transactions to append`);
+    console.log(`🛡️ SAFETY: Existing data will NOT be touched - only appending new transactions`);
+
+    // Save rejected transactions to RecycleBin
+    let recycleBinSaved = 0;
+    if (rejectedTransactions.length > 0) {
+      recycleBinSaved = await saveToRecycleBin(sheets, spreadsheetId, rejectedTransactions);
+    }
+
+    if (sortedTransactions.length === 0) {
+      console.log('ℹ️ No new transactions to append after deduplication and filtering');
+      await updateSettingsStatus(sheets, spreadsheetId, apiStatus);
+      
+      return {
+        success: true,
+        withdrawalsAdded: 0,
+        depositsAdded: 0,
+        statusUpdated: true,
+        totalRaw: transactions.length,
+        totalAfterDedup: uniqueTransactions.length,
+        totalAfterFilter: filteredTransactions.length,
+        duplicatesRemoved: transactions.length - uniqueTransactions.length,
+        filteredOut: uniqueTransactions.length - filteredTransactions.length,
+        recycleBinSaved: recycleBinSaved,
+        unknownCurrencies: unknownCurrencies
+      };
+    }
+
+    const sortedWithdrawals = sortedTransactions.filter(tx => tx.type === 'withdrawal');
+    const sortedDeposits = sortedTransactions.filter(tx => tx.type === 'deposit');
+
     let withdrawalsAdded = 0;
     let depositsAdded = 0;
-    
-    if (withdrawals.length > 0) {
-      const withdrawalsRange = 'Withdrawals!F7:L1000';
-      const withdrawalsData = withdrawals.map(tx => [
-        tx.platform,
-        tx.asset,
-        tx.amount,
-        tx.timestamp,
-        tx.from_address,
-        tx.to_address,
-        tx.tx_id
-      ]);
+
+    // FIXED: Write to columns F:L using exact range targeting
+    if (sortedWithdrawals.length > 0) {
+      console.log(`📤 WRITING ${sortedWithdrawals.length} new withdrawals to columns F:L...`);
       
+      const withdrawalRows = sortedWithdrawals.map(tx => [
+        tx.platform, // F
+        tx.asset, // G
+        parseFloat(tx.amount).toFixed(8), // H
+        formatDateTimeSimple(tx.timestamp), // I
+        tx.from_address, // J
+        tx.to_address, // K
+        tx.tx_id // L
+      ]);
+
+      // Find next empty row in column F (never before row 7)
+      const lastRowResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: 'Withdrawals!F:F'
+      });
+      const nextRow = Math.max(7, (lastRowResponse.data.values?.length || 6) + 1); // Ensure minimum row 7
+      const endRow = nextRow + withdrawalRows.length - 1;
+
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: withdrawalsRange,
-        valueInputOption: 'USER_ENTERED',
-        resource: { values: withdrawalsData }
+        range: `Withdrawals!F${nextRow}:L${endRow}`, // FIXED: Exact F:L range
+        valueInputOption: 'RAW',
+        requestBody: { values: withdrawalRows }
       });
       
-      withdrawalsAdded = withdrawals.length;
-      console.log(`📤 WROTE ${withdrawals.length} withdrawals to F51:L76`);
+      withdrawalsAdded = sortedWithdrawals.length;
+      console.log(`✅ WROTE ${withdrawalsAdded} withdrawals to F${nextRow}:L${endRow}`);
     }
-    
-    if (deposits.length > 0) {
-      const depositsRange = 'Deposits!F7:L1000';
-      const depositsData = deposits.map(tx => [
-        tx.platform,
-        tx.asset,
-        tx.amount,
-        tx.timestamp,
-        tx.from_address,
-        tx.to_address,
-        tx.tx_id
-      ]);
+
+    if (sortedDeposits.length > 0) {
+      console.log(`📥 WRITING ${sortedDeposits.length} new deposits to columns F:L...`);
       
+      const depositRows = sortedDeposits.map(tx => [
+        tx.platform, // F
+        tx.asset, // G
+        parseFloat(tx.amount).toFixed(8), // H
+        formatDateTimeSimple(tx.timestamp), // I
+        tx.from_address, // J
+        tx.to_address, // K
+        tx.tx_id // L
+      ]);
+
+      // Find next empty row in column F (never before row 7)
+      const lastRowResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: 'Deposits!F:F'
+      });
+      const nextRow = Math.max(7, (lastRowResponse.data.values?.length || 6) + 1); // Ensure minimum row 7
+      const endRow = nextRow + depositRows.length - 1;
+
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: depositsRange,
-        valueInputOption: 'USER_ENTERED',
-        resource: { values: depositsData }
+        range: `Deposits!F${nextRow}:L${endRow}`, // FIXED: Exact F:L range
+        valueInputOption: 'RAW',
+        requestBody: { values: depositRows }
       });
       
-      depositsAdded = deposits.length;
-      console.log(`📥 WROTE ${deposits.length} deposits to F70:L104`);
+      depositsAdded = sortedDeposits.length;
+      console.log(`✅ WROTE ${depositsAdded} deposits to F${nextRow}:L${endRow}`);
     }
-    
-    // 7. Update settings status
-    await updateSettingsStatusOnly(apiStatusResults);
-    
-    return {
+
+    await updateSettingsStatus(sheets, spreadsheetId, apiStatus);
+
+    const result = {
       success: true,
-      withdrawalsAdded,
-      depositsAdded,
+      withdrawalsAdded: withdrawalsAdded,
+      depositsAdded: depositsAdded,
       statusUpdated: true,
       totalRaw: transactions.length,
       totalAfterDedup: uniqueTransactions.length,
       totalAfterFilter: filteredTransactions.length,
       duplicatesRemoved: transactions.length - uniqueTransactions.length,
-      filteredOut,
-      recycleBinSaved: 0,
-      unknownCurrencies,
-      safetyNote: 'Only wrote new transactions to F:L columns - existing accountant data (A:E) untouched'
+      filteredOut: uniqueTransactions.length - filteredTransactions.length,
+      recycleBinSaved: recycleBinSaved,
+      unknownCurrencies: unknownCurrencies,
+              safetyNote: "Only wrote new transactions to F:L columns - existing accountant data (A:E) untouched"
     };
-    
+
+    console.log('🎉 FIXED deduplication completed:', result);
+    console.log('🛡️ GUARANTEE: Columns A:E (accountant data) never touched - only F:L updated');
+    if (unknownCurrencies.length > 0) {
+      console.log('⚠️ UNKNOWN CURRENCIES using 1 AED default:', unknownCurrencies.join(', '));
+    }
+    return result;
+
   } catch (error) {
-    console.error('❌ Google Sheets write failed:', error);
+    console.error('❌ Error in FIXED writeToGoogleSheets:', error);
     throw error;
   }
 }
 
-async function updateSettingsStatusOnly(apiStatusResults) {
+async function updateSettingsStatusOnly(apiStatus) {
+  const credentials = {
+    type: "service_account",
+    project_id: process.env.GOOGLE_PROJECT_ID,
+    private_key_id: process.env.GOOGLE_PRIVATE_KEY_ID,
+    private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    client_email: process.env.GOOGLE_CLIENT_EMAIL,
+    client_id: process.env.GOOGLE_CLIENT_ID,
+    auth_uri: "https://accounts.google.com/o/oauth2/auth",
+    token_uri: "https://oauth2.googleapis.com/token",
+    auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+    client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${process.env.GOOGLE_CLIENT_EMAIL}`
+  };
+
+  const auth = new GoogleAuth({
+    credentials: credentials,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets']
+  });
+
+  const sheets = google.sheets({ version: 'v4', auth });
+  const spreadsheetId = '1pLsxrfU5NgHF4aNLXNnCCvGgBvKO4EKjb44iiVvUp5Q';
+
+  await updateSettingsStatus(sheets, spreadsheetId, apiStatus);
+}
+
+async function updateSettingsStatus(sheets, spreadsheetId, apiStatus) {
   try {
-    const auth = new GoogleAuth({
-      credentials: {
-        client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n')
-      },
-      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    console.log('📊 Updating Settings status table...');
+    
+    const statusRows = [];
+    
+    Object.entries(apiStatus).forEach(([platform, status]) => {
+      statusRows.push([
+        platform,
+        status.status,
+        formatDateTimeSimple(status.lastSync),
+        status.autoUpdate,
+        status.notes
+      ]);
     });
 
-    const sheets = google.sheets({ version: 'v4', auth });
-    const spreadsheetId = process.env.GOOGLE_SHEET_ID;
-    
-    const statusRange = 'Settings!B2:E10';
-    const statusData = Object.entries(apiStatusResults).map(([name, status]) => [
-      name,
-      status.status,
-      status.lastSync,
-      status.notes
-    ]);
-    
-    await sheets.spreadsheets.values.update({
-      spreadsheetId,
-      range: statusRange,
-      valueInputOption: 'USER_ENTERED',
-      resource: { values: statusData }
-    });
-    
-    console.log('📊 Updated Settings status table...');
-    return true;
-    
+    if (statusRows.length > 0) {
+      await sheets.spreadsheets.values.clear({
+        spreadsheetId,
+        range: 'SETTINGS!A3:E20'
+      });
+
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: 'SETTINGS!A2:E2',
+        valueInputOption: 'RAW',
+        requestBody: {
+          values: [['Platform', 'API Status', 'Last Sync', 'Auto-Update', 'Notes']]
+        }
+      });
+
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `SETTINGS!A3:E${2 + statusRows.length}`,
+        valueInputOption: 'RAW',
+        requestBody: {
+          values: statusRows
+        }
+      });
+
+      console.log(`✅ Updated ${statusRows.length} API statuses in Settings`);
+    }
+
   } catch (error) {
-    console.error('❌ Status update failed:', error);
+    console.error('❌ Error updating Settings status:', error);
     throw error;
   }
+}
+
+// ===========================================
+// UTILITY FUNCTIONS
+// ===========================================
+
+function createBinanceSignature(params, secret) {
+  const queryString = createQueryString(params);
+  return crypto.createHmac('sha256', secret).update(queryString).digest('hex');
+}
+
+function createQueryString(params) {
+  return Object.keys(params)
+    .sort()
+    .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
+    .join('&');
+}
+
+function formatDateTimeSimple(isoString) {
+  const date = new Date(isoString);
+  return date.toISOString().slice(0, 16).replace('T', ' ');
+  
 }
