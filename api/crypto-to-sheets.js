@@ -1,5 +1,4 @@
 // ===========================================
-// COMPLETE ENHANCED CRYPTO API WITH CURRENCY & RECYCLEBIN MODIFICATIONS
 // Replace your entire api/crypto-to-sheets.js with this file
 // Features: Enhanced debugging, ByBit V5 fix, P2P/Pay debugging, Multiple Bitcoin APIs, Currency handling, RecycleBin
 // ===========================================
