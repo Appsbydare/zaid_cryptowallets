@@ -1007,32 +1007,37 @@ async function testByBitAccountEnhanced(config, filterDate) {
   }
 }
 
-// =============================================
-// FIXED BYBIT DEPOSIT FUNCTIONS - WITH COIN PARAMETER & INTERNAL DEPOSITS
-// =============================================
-
 async function fetchByBitDepositsEnhanced(config, filterDate, accountType = "UNIFIED") {
   try {
-    console.log(`    💰 Fetching ByBit deposits for ${config.name} (${accountType}) with FIXES...`);
+    console.log(`    💰 Fetching ByBit deposits for ${config.name} (${accountType}) with SIGNATURE FIX...`);
     
     let allDeposits = [];
-    
-    // Major coins to check (required for UNIFIED accounts)
     const coinsToCheck = ['USDT', 'BTC', 'ETH', 'SOL', 'BNB', 'USDC', 'TRX'];
     
-    // Method 1: External deposits (on-chain) with coin parameter
     for (const coin of coinsToCheck) {
       try {
-        console.log(`      🪙 Checking external deposits for ${coin}...`);
+        console.log(`      🪙 Checking deposits for ${coin}...`);
         
         const timestamp = Date.now().toString();
-        const recv_window = "5000";
+        const recvWindow = "5000";
         const endpoint = "https://api.bybit.com/v5/asset/deposit/query-record";
         
-        const queryParams = `coin=${coin}&timestamp=${timestamp}&limit=50&startTime=${filterDate.getTime()}`;
-        const signString = timestamp + config.apiKey + recv_window + queryParams;
-        const signature = crypto.createHmac('sha256', config.apiSecret).update(signString).digest('hex');
-        const url = `${endpoint}?${queryParams}`;
+        // FIXED: Proper parameter structure
+        const params = {
+          coin: coin,
+          timestamp: timestamp,
+          limit: 50,
+          startTime: filterDate.getTime()
+        };
+        
+        // FIXED: Use NEW signature function
+        const signature = createByBitSignature(params, config.apiKey, config.apiSecret, timestamp, recvWindow);
+        
+        const queryString = Object.keys(params)
+          .map(key => `${key}=${params[key]}`)
+          .join('&');
+        
+        const url = `${endpoint}?${queryString}`;
 
         const response = await fetch(url, {
           method: "GET",
@@ -1040,7 +1045,7 @@ async function fetchByBitDepositsEnhanced(config, filterDate, accountType = "UNI
             "X-BAPI-API-KEY": config.apiKey,
             "X-BAPI-SIGN": signature,
             "X-BAPI-TIMESTAMP": timestamp,
-            "X-BAPI-RECV-WINDOW": recv_window,
+            "X-BAPI-RECV-WINDOW": recvWindow,
             "Content-Type": "application/json"
           }
         });
@@ -1051,7 +1056,7 @@ async function fetchByBitDepositsEnhanced(config, filterDate, accountType = "UNI
           if (data.retCode === 0 && data.result?.rows) {
             const deposits = data.result.rows.filter(deposit => {
               const depositDate = new Date(parseInt(deposit.successAt));
-              return depositDate >= filterDate && deposit.status === "3"; // Status 3 = success
+              return depositDate >= filterDate && deposit.status === "3";
             }).map(deposit => ({
               platform: config.name,
               type: "deposit",
@@ -1063,99 +1068,54 @@ async function fetchByBitDepositsEnhanced(config, filterDate, accountType = "UNI
               tx_id: deposit.txID || deposit.id,
               status: "Completed",
               network: deposit.chain,
-              api_source: "ByBit_Deposit_V5_External_Fixed"
+              api_source: "ByBit_Deposit_V5_Fixed_Signature"
             }));
             
             allDeposits.push(...deposits);
-            console.log(`        ✅ ${coin} external deposits: ${deposits.length}`);
+            console.log(`        ✅ ${coin} deposits: ${deposits.length}`);
+          } else {
+            console.log(`        ⚠️ ${coin} deposits: ${data.retMsg || 'No data'}`);
           }
         } else {
-          console.log(`        ⚠️ ${coin} external deposits failed: ${response.status}`);
+          console.log(`        ❌ ${coin} deposits failed: ${response.status}`);
         }
 
       } catch (coinError) {
-        console.log(`        ❌ ${coin} external deposits error: ${coinError.message}`);
+        console.log(`        ❌ ${coin} deposits error: ${coinError.message}`);
       }
-    }
-
-    // Method 2: Internal deposits (off-chain, within Bybit platform)
-    try {
-      console.log(`      🔄 Checking internal deposits (off-chain)...`);
-      
-      const timestamp = Date.now().toString();
-      const recv_window = "5000";
-      const endpoint = "https://api.bybit.com/v5/asset/deposit/query-internal-record";
-      
-      const queryParams = `timestamp=${timestamp}&limit=50&startTime=${filterDate.getTime()}`;
-      const signString = timestamp + config.apiKey + recv_window + queryParams;
-      const signature = crypto.createHmac('sha256', config.apiSecret).update(signString).digest('hex');
-      const url = `${endpoint}?${queryParams}`;
-
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          "X-BAPI-API-KEY": config.apiKey,
-          "X-BAPI-SIGN": signature,
-          "X-BAPI-TIMESTAMP": timestamp,
-          "X-BAPI-RECV-WINDOW": recv_window,
-          "Content-Type": "application/json"
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        
-        if (data.retCode === 0 && data.result?.rows) {
-          const internalDeposits = data.result.rows.filter(deposit => {
-            const depositDate = new Date(parseInt(deposit.successAt));
-            return depositDate >= filterDate && deposit.status === "SUCCESS";
-          }).map(deposit => ({
-            platform: config.name,
-            type: "deposit",
-            asset: deposit.coin,
-            amount: deposit.amount.toString(),
-            timestamp: new Date(parseInt(deposit.successAt)).toISOString(),
-            from_address: "Bybit Internal",
-            to_address: config.name,
-            tx_id: `INTERNAL_${deposit.id}`,
-            status: "Completed",
-            network: "Internal",
-            api_source: "ByBit_Deposit_V5_Internal_Fixed"
-          }));
-          
-          allDeposits.push(...internalDeposits);
-          console.log(`        ✅ Internal deposits: ${internalDeposits.length}`);
-        }
-      } else {
-        console.log(`        ⚠️ Internal deposits failed: ${response.status}`);
-      }
-
-    } catch (internalError) {
-      console.log(`        ❌ Internal deposits error: ${internalError.message}`);
     }
 
     console.log(`    ✅ ByBit total deposits: ${allDeposits.length} transactions`);
     return allDeposits;
 
   } catch (error) {
-    console.error(`Error fetching FIXED ByBit deposits for ${config.name}:`, error);
+    console.error(`Error fetching ByBit deposits for ${config.name}:`, error);
     return [];
   }
 }
 
-
 async function fetchByBitWithdrawalsEnhanced(config, filterDate, accountType = "UNIFIED") {
   try {
-    console.log(`    📤 Fetching ByBit withdrawals for ${config.name} (${accountType})...`);
+    console.log(`    📤 Fetching ByBit withdrawals for ${config.name} (${accountType}) with SIGNATURE FIX...`);
     
     const timestamp = Date.now().toString();
-    const recv_window = "5000";
+    const recvWindow = "5000";
     const endpoint = "https://api.bybit.com/v5/asset/withdraw/query-record";
     
-    const queryParams = `timestamp=${timestamp}&limit=50&startTime=${filterDate.getTime()}`;
-    const signString = timestamp + config.apiKey + recv_window + queryParams;
-    const signature = crypto.createHmac('sha256', config.apiSecret).update(signString).digest('hex');
-    const url = `${endpoint}?${queryParams}`;
+    const params = {
+      timestamp: timestamp,
+      limit: 50,
+      startTime: filterDate.getTime()
+    };
+    
+    // FIXED: Use NEW signature function
+    const signature = createByBitSignature(params, config.apiKey, config.apiSecret, timestamp, recvWindow);
+    
+    const queryString = Object.keys(params)
+      .map(key => `${key}=${params[key]}`)
+      .join('&');
+    
+    const url = `${endpoint}?${queryString}`;
 
     const response = await fetch(url, {
       method: "GET",
@@ -1163,7 +1123,7 @@ async function fetchByBitWithdrawalsEnhanced(config, filterDate, accountType = "
         "X-BAPI-API-KEY": config.apiKey,
         "X-BAPI-SIGN": signature,
         "X-BAPI-TIMESTAMP": timestamp,
-        "X-BAPI-RECV-WINDOW": recv_window,
+        "X-BAPI-RECV-WINDOW": recvWindow,
         "Content-Type": "application/json"
       }
     });
@@ -1197,7 +1157,7 @@ async function fetchByBitWithdrawalsEnhanced(config, filterDate, accountType = "
       tx_id: withdrawal.txID || withdrawal.id,
       status: "Completed",
       network: withdrawal.chain,
-      api_source: "ByBit_Withdrawal_V5_Enhanced"
+      api_source: "ByBit_Withdrawal_V5_Fixed_Signature"
     }));
 
     console.log(`    ✅ ByBit withdrawals: ${withdrawals.length} transactions`);
@@ -1207,6 +1167,20 @@ async function fetchByBitWithdrawalsEnhanced(config, filterDate, accountType = "
     console.error(`Error fetching ByBit withdrawals for ${config.name}:`, error);
     return [];
   }
+}
+function createByBitSignature(params, apiKey, apiSecret, timestamp, recvWindow = "5000") {
+  // FIXED: Proper parameter ordering for ByBit V5
+  const queryString = Object.keys(params)
+    .sort()
+    .map(key => `${key}=${params[key]}`)
+    .join('&');
+  
+  // FIXED: Correct signature string format for ByBit V5
+  const signaturePayload = timestamp + apiKey + recvWindow + queryString;
+  
+  console.log(`        🔐 ByBit Signature String: ${signaturePayload}`);
+  
+  return crypto.createHmac('sha256', apiSecret).update(signaturePayload).digest('hex');
 }
 
 // ===========================================
