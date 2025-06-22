@@ -666,7 +666,7 @@ async function fetchBinancePayFixed(account, filterDate, debugLogs) {
         return [];
     }
 
-    const payTransactions = data.data.filter(tx => tx.status === "SUCCESS");
+    const payTransactions = data.data;
     log(`        [PAY DEBUG] Found ${payTransactions.length} successful transactions.`);
 
     return payTransactions.map(tx => {
