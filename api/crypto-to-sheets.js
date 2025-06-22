@@ -671,17 +671,42 @@ async function fetchBinancePayFixed(account, filterDate, debugLogs) {
 
     return payTransactions.map(tx => {
       log(`        [PAY DEBUG] Processing transaction: ${JSON.stringify(tx, null, 2)}`);
-      const isDeposit = parseFloat(tx.amount) > 0;
-      log(`        [PAY DEBUG] Is Deposit: ${isDeposit} (amount: ${tx.amount})`);
+      
+      // FIXED: Correct logic - check if account is payer (withdrawal) or receiver (deposit)
+      const accountUid = tx.uid;
+      const isPayer = tx.payerInfo?.binanceId === accountUid;
+      const isReceiver = tx.receiverInfo?.binanceId === accountUid;
+      
+      // Determine transaction type based on account role
+      let transactionType;
+      if (isPayer && !isReceiver) {
+        transactionType = "withdrawal"; // Account is paying out
+      } else if (isReceiver && !isPayer) {
+        transactionType = "deposit"; // Account is receiving
+      } else {
+        // Fallback to amount sign if role is unclear
+        transactionType = parseFloat(tx.amount) > 0 ? "deposit" : "withdrawal";
+        log(`        [PAY DEBUG] Using fallback logic - amount sign: ${tx.amount}`);
+      }
+      
+      log(`        [PAY DEBUG] Account UID: ${accountUid}, Is Payer: ${isPayer}, Is Receiver: ${isReceiver}, Type: ${transactionType}`);
+      
+      // Get counterparty name
+      let counterpartyName = "Binance Pay User";
+      if (transactionType === "withdrawal") {
+        counterpartyName = tx.receiverInfo?.name || "Binance Pay User";
+      } else {
+        counterpartyName = tx.payerInfo?.name || "Binance Pay User";
+      }
       
       return {
         platform: account.name,
-        type: isDeposit ? "deposit" : "withdrawal",
+        type: transactionType,
         asset: tx.currency,
         amount: Math.abs(parseFloat(tx.amount)).toString(),
         timestamp: new Date(tx.transactionTime).toISOString(),
-        from_address: isDeposit ? (tx.payerInfo?.name || tx.receiverInfo?.name || "Binance Pay User") : account.name,
-        to_address: isDeposit ? account.name : (tx.payerInfo?.name || tx.receiverInfo?.name || "Binance Pay User"),
+        from_address: transactionType === "withdrawal" ? account.name : counterpartyName,
+        to_address: transactionType === "withdrawal" ? counterpartyName : account.name,
         tx_id: `PAY_${tx.transactionId}`,
         status: "Completed",
         network: "Binance Pay",
