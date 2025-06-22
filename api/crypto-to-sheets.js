@@ -630,19 +630,26 @@ async function fetchBinancePayFixed(account, filterDate) {
     const queryString = createQueryString(params);
     const url = `${endpoint}?${queryString}&signature=${signature}`;
     
-    console.log(`        🔍 Pay Request URL: ${url.split('?')[0]}`);
+    console.log(`        [PAY DEBUG] Request URL: ${url.split('?')[0]}`);
+    console.log(`        [PAY DEBUG] Request Params: ${JSON.stringify(params)}`);
+
     const response = await fetch(url, {
       method: "GET",
       headers: { "X-MBX-APIKEY": account.apiKey, "User-Agent": "Mozilla/5.0" }
     });
 
     const responseText = await response.text();
+    console.log(`        [PAY DEBUG] Response Status: ${response.status}`);
+    console.log(`        [PAY DEBUG] Raw Response Body: ${responseText}`);
+
     if (!response.ok) {
       console.error(`        ❌ Pay API Error: ${response.status} - ${responseText}`);
       return [];
     }
 
-    const data = await response.json();
+    const data = JSON.parse(responseText);
+    console.log(`        [PAY DEBUG] Parsed Data:`, JSON.stringify(data, null, 2));
+
     if (data.code !== "000000" || !data.success) {
       console.error(`        ❌ Pay API Logic Error: ${data.message}`);
       return [];
@@ -654,11 +661,12 @@ async function fetchBinancePayFixed(account, filterDate) {
     }
 
     const payTransactions = data.data.filter(tx => tx.status === "SUCCESS");
-    console.log(`        📊 Pay Successful Transactions: ${payTransactions.length}`);
+    console.log(`        [PAY DEBUG] Found ${payTransactions.length} successful transactions.`);
 
     return payTransactions.map(tx => {
-      // More robust check for deposits (funds IN) vs withdrawals (funds OUT)
+      console.log(`        [PAY DEBUG] Processing transaction:`, JSON.stringify(tx, null, 2));
       const isDeposit = tx.fundsDetail.some(fund => parseFloat(fund.amount) > 0);
+      console.log(`        [PAY DEBUG] Is Deposit: ${isDeposit}`);
       
       return {
         platform: account.name,
