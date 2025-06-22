@@ -587,19 +587,22 @@ async function fetchBinanceP2PFixed(account, filterDate) {
     const orders = data.data.filter(order => order.orderStatus === "COMPLETED");
     console.log(`        📊 P2P Completed Orders: ${orders.length}`);
 
-    return orders.map(order => ({
-      platform: account.name,
-      type: order.tradeType === 'BUY' ? "deposit" : "withdrawal",
-      asset: order.asset,
-      amount: order.amount.toString(),
-      timestamp: new Date(order.createTime).toISOString(),
-      from_address: order.tradeType === 'BUY' ? "P2P User" : account.name,
-      to_address: order.tradeType === 'BUY' ? account.name : "P2P User",
-      tx_id: `P2P_${order.orderNumber}`,
-      status: "Completed",
-      network: "P2P",
-      api_source: "Binance_P2P_Official"
-    }));
+    return orders.map(order => {
+      const isBuy = order.tradeType === 'BUY';
+      return {
+        platform: account.name,
+        type: isBuy ? "deposit" : "withdrawal",
+        asset: order.asset,
+        amount: order.amount.toString(),
+        timestamp: new Date(order.createTime).toISOString(),
+        from_address: isBuy ? (order.counterPartNickName || "P2P User") : account.name,
+        to_address: isBuy ? account.name : (order.counterPartNickName || "P2P User"),
+        tx_id: `P2P_${order.orderNumber}`,
+        status: "Completed",
+        network: "P2P",
+        api_source: "Binance_P2P_Official"
+      };
+    });
 
   } catch (error) {
     console.error(`    ❌ P2P fetch failed for ${account.name}:`, error);
@@ -654,15 +657,17 @@ async function fetchBinancePayFixed(account, filterDate) {
     console.log(`        📊 Pay Successful Transactions: ${payTransactions.length}`);
 
     return payTransactions.map(tx => {
-      const isDeposit = tx.orderType === "C2C_BUY_ORDER";
+      // More robust check for deposits (funds IN) vs withdrawals (funds OUT)
+      const isDeposit = tx.fundsDetail.some(fund => parseFloat(fund.amount) > 0);
+      
       return {
         platform: account.name,
         type: isDeposit ? "deposit" : "withdrawal",
         asset: tx.currency,
-        amount: tx.amount.toString(),
+        amount: Math.abs(parseFloat(tx.amount)).toString(),
         timestamp: new Date(tx.transactionTime).toISOString(),
-        from_address: isDeposit ? "Binance Pay User" : account.name,
-        to_address: isDeposit ? account.name : "Binance Pay User",
+        from_address: isDeposit ? (tx.counterpartUsername || "Binance Pay User") : account.name,
+        to_address: isDeposit ? account.name : (tx.counterpartUsername || "Binance Pay User"),
         tx_id: `PAY_${tx.transactionId}`,
         status: "Completed",
         network: "Binance Pay",
