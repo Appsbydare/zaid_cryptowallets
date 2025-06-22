@@ -18,13 +18,15 @@ export default async function handler(req, res) {
     return;
   }
 
+  const debugLogs = [];
+
   try {
-    console.log('🚀 Starting FIXED crypto data fetch...');
+    debugLogs.push('🚀 Starting FIXED crypto data fetch...');
 
     // Get date filtering from request or use defaults
     const startDate = req.body?.startDate || '2025-05-31T00:00:00.000Z';
     const filterDate = new Date(startDate);
-    console.log(`📅 Filtering transactions after: ${startDate}`);
+    debugLogs.push(`📅 Filtering transactions after: ${startDate}`);
 
     const allTransactions = [];
     const apiStatusResults = {};
@@ -33,7 +35,7 @@ export default async function handler(req, res) {
     // ===========================================
     // STEP 1: FIXED BINANCE APIS
     // ===========================================
-    console.log('🔧 Testing Binance APIs with FIXED endpoints...');
+    debugLogs.push('🔧 Testing Binance APIs with FIXED endpoints...');
     
     const binanceAccounts = [
       {
@@ -55,7 +57,7 @@ export default async function handler(req, res) {
 
     for (const account of binanceAccounts) {
       if (!account.apiKey || !account.apiSecret) {
-        console.log(`⚠️ ${account.name}: Missing API credentials`);
+        debugLogs.push(`⚠️ ${account.name}: Missing API credentials`);
         apiStatusResults[account.name] = {
           status: 'Error',
           lastSync: new Date().toISOString(),
@@ -66,16 +68,16 @@ export default async function handler(req, res) {
         continue;
       }
 
-      console.log(`🔧 Processing ${account.name} with FIXES...`);
-      const result = await testBinanceAccountFixed(account, filterDate);
+      debugLogs.push(`🔧 Processing ${account.name} with FIXES...`);
+      const result = await testBinanceAccountFixed(account, filterDate, debugLogs);
       apiStatusResults[account.name] = result.status;
       
       if (result.success) {
         allTransactions.push(...result.transactions);
         totalTransactionsFound += result.transactions.length;
-        console.log(`✅ ${account.name}: ${result.transactions.length} transactions`);
+        debugLogs.push(`✅ ${account.name}: ${result.transactions.length} transactions`);
       } else {
-        console.log(`❌ ${account.name}: ${result.status.notes}`);
+        debugLogs.push(`❌ ${account.name}: ${result.status.notes}`);
       }
     }
 
@@ -83,27 +85,27 @@ export default async function handler(req, res) {
     // STEP 2: FIXED BYBIT API (V5 AUTHENTICATION)
     // ===========================================
     if (process.env.BYBIT_API_KEY && process.env.BYBIT_API_SECRET) {
-      console.log('🔧 Testing ByBit with FIXED V5 authentication...');
+      debugLogs.push('🔧 Testing ByBit with FIXED V5 authentication...');
       const bybitResult = await testByBitAccountFixed({
         name: "ByBit (CV)",
         apiKey: process.env.BYBIT_API_KEY,
         apiSecret: process.env.BYBIT_API_SECRET
-      }, filterDate);
+      }, filterDate, debugLogs);
       
       apiStatusResults["ByBit (CV)"] = bybitResult.status;
       if (bybitResult.success) {
         allTransactions.push(...bybitResult.transactions);
         totalTransactionsFound += bybitResult.transactions.length;
-        console.log(`✅ ByBit: ${bybitResult.transactions.length} transactions`);
+        debugLogs.push(`✅ ByBit: ${bybitResult.transactions.length} transactions`);
       } else {
-        console.log(`❌ ByBit: ${bybitResult.status.notes}`);
+        debugLogs.push(`❌ ByBit: ${bybitResult.status.notes}`);
       }
     }
 
     // ===========================================
     // STEP 3: BLOCKCHAIN DATA (UNCHANGED)
     // ===========================================
-    console.log('🔧 Fetching blockchain data...');
+    debugLogs.push('🔧 Fetching blockchain data...');
     
     const wallets = {
       BTC: "bc1qkuefzcmc6c8enw9f7a2e9w2hy964q3jgwcv35g",
@@ -114,7 +116,7 @@ export default async function handler(req, res) {
 
     // Bitcoin API
     try {
-      console.log('🔧 Testing Bitcoin API...');
+      debugLogs.push('🔧 Testing Bitcoin API...');
       const btcTxs = await fetchBitcoinEnhanced(wallets.BTC, filterDate);
       allTransactions.push(...btcTxs);
       totalTransactionsFound += btcTxs.length;
@@ -125,7 +127,7 @@ export default async function handler(req, res) {
         notes: `🔧 ${btcTxs.length} transactions found`,
         transactionCount: btcTxs.length
       };
-      console.log(`✅ Bitcoin: ${btcTxs.length} transactions`);
+      debugLogs.push(`✅ Bitcoin: ${btcTxs.length} transactions`);
     } catch (error) {
       apiStatusResults['Bitcoin Wallet'] = {
         status: 'Error',
@@ -134,12 +136,12 @@ export default async function handler(req, res) {
         notes: `❌ ${error.message}`,
         transactionCount: 0
       };
-      console.error(`❌ Bitcoin error:`, error.message);
+      debugLogs.push(`❌ Bitcoin error: ${error.message}`);
     }
 
     // Ethereum API
     try {
-      console.log('🔧 Testing Ethereum API...');
+      debugLogs.push('🔧 Testing Ethereum API...');
       const ethTxs = await fetchEthereumEnhanced(wallets.ETH, filterDate);
       allTransactions.push(...ethTxs);
       totalTransactionsFound += ethTxs.length;
@@ -150,7 +152,7 @@ export default async function handler(req, res) {
         notes: `🔧 ${ethTxs.length} transactions found`,
         transactionCount: ethTxs.length
       };
-      console.log(`✅ Ethereum: ${ethTxs.length} transactions`);
+      debugLogs.push(`✅ Ethereum: ${ethTxs.length} transactions`);
     } catch (error) {
       apiStatusResults['Ethereum Wallet'] = {
         status: 'Error',
@@ -159,12 +161,12 @@ export default async function handler(req, res) {
         notes: `❌ ${error.message}`,
         transactionCount: 0
       };
-      console.error(`❌ Ethereum error:`, error.message);
+      debugLogs.push(`❌ Ethereum error: ${error.message}`);
     }
 
     // TRON API
     try {
-      console.log('🔧 Testing TRON API...');
+      debugLogs.push('🔧 Testing TRON API...');
       const tronTxs = await fetchTronEnhanced(wallets.TRON, filterDate);
       allTransactions.push(...tronTxs);
       totalTransactionsFound += tronTxs.length;
@@ -175,7 +177,7 @@ export default async function handler(req, res) {
         notes: `🔧 ${tronTxs.length} transactions found`,
         transactionCount: tronTxs.length
       };
-      console.log(`✅ TRON: ${tronTxs.length} transactions`);
+      debugLogs.push(`✅ TRON: ${tronTxs.length} transactions`);
     } catch (error) {
       apiStatusResults['TRON Wallet'] = {
         status: 'Error',
@@ -184,12 +186,12 @@ export default async function handler(req, res) {
         notes: `❌ ${error.message}`,
         transactionCount: 0
       };
-      console.error(`❌ TRON error:`, error.message);
+      debugLogs.push(`❌ TRON error: ${error.message}`);
     }
 
     // Solana API
     try {
-      console.log('🔧 Testing Solana API...');
+      debugLogs.push('🔧 Testing Solana API...');
       const solTxs = await fetchSolanaEnhanced(wallets.SOL, filterDate);
       allTransactions.push(...solTxs);
       totalTransactionsFound += solTxs.length;
@@ -200,7 +202,7 @@ export default async function handler(req, res) {
         notes: `🔧 ${solTxs.length} transactions found`,
         transactionCount: solTxs.length
       };
-      console.log(`✅ Solana: ${solTxs.length} transactions`);
+      debugLogs.push(`✅ Solana: ${solTxs.length} transactions`);
     } catch (error) {
       apiStatusResults['Solana Wallet'] = {
         status: 'Error',
@@ -209,22 +211,22 @@ export default async function handler(req, res) {
         notes: `❌ ${error.message}`,
         transactionCount: 0
       };
-      console.error(`❌ Solana error:`, error.message);
+      debugLogs.push(`❌ Solana error: ${error.message}`);
     }
 
     // ===========================================
     // STEP 4: WRITE TO GOOGLE SHEETS WITH FIXES
     // ===========================================
-    console.log(`🔧 Processing ${allTransactions.length} transactions with FIXED deduplication...`);
+    debugLogs.push(`🔧 Processing ${allTransactions.length} transactions with FIXED deduplication...`);
     
     let sheetsResult = { success: false, withdrawalsAdded: 0, depositsAdded: 0 };
     
     if (allTransactions.length > 0) {
       try {
-        sheetsResult = await writeToGoogleSheetsFixed(allTransactions, apiStatusResults);
-        console.log('✅ Google Sheets write successful:', sheetsResult);
+        sheetsResult = await writeToGoogleSheetsFixed(allTransactions, apiStatusResults, debugLogs);
+        debugLogs.push('✅ Google Sheets write successful:', sheetsResult);
       } catch (sheetsError) {
-        console.error('❌ Google Sheets write failed:', sheetsError);
+        debugLogs.push('❌ Google Sheets write failed:', sheetsError);
         sheetsResult = { 
           success: false, 
           error: sheetsError.message,
@@ -238,7 +240,7 @@ export default async function handler(req, res) {
         await updateSettingsStatusOnly(apiStatusResults);
         sheetsResult.statusUpdated = true;
       } catch (error) {
-        console.error('❌ Status update failed:', error);
+        debugLogs.push('❌ Status update failed:', error);
       }
     }
 
@@ -270,16 +272,18 @@ export default async function handler(req, res) {
         errorAPIs: Object.values(apiStatusResults).filter(s => s.status === 'Error').length,
         fixedFeatures: 'ByBit V5 + Binance P2P + Extended Currencies + Google Sheets Fix'
       },
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      debugLogs: debugLogs
     });
 
   } catch (error) {
-    console.error('❌ Fixed Vercel Error:', error);
+    debugLogs.push('❌ Fixed Vercel Error:', error);
     
     res.status(500).json({
       success: false,
       error: error.message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      debugLogs: debugLogs
     });
   }
 }
@@ -288,7 +292,7 @@ export default async function handler(req, res) {
 // FIXED BINANCE API FUNCTIONS
 // ===========================================
 
-async function testBinanceAccountFixed(account, filterDate) {
+async function testBinanceAccountFixed(account, filterDate, debugLogs) {
   try {
     const timestamp = Date.now();
     
@@ -370,28 +374,28 @@ async function testBinanceAccountFixed(account, filterDate) {
       const deposits = await fetchBinanceDepositsFixed(account, filterDate);
       transactions.push(...deposits);
       transactionBreakdown.deposits = deposits.length;
-      console.log(`  💰 ${account.name} deposits: ${deposits.length}`);
+      debugLogs.push(`  💰 ${account.name} deposits: ${deposits.length}`);
 
       // 2. Fetch regular withdrawals
       const withdrawals = await fetchBinanceWithdrawalsFixed(account, filterDate);
       transactions.push(...withdrawals);
       transactionBreakdown.withdrawals = withdrawals.length;
-      console.log(`  📤 ${account.name} withdrawals: ${withdrawals.length}`);
+      debugLogs.push(`  📤 ${account.name} withdrawals: ${withdrawals.length}`);
 
       // 3. FIXED P2P transactions
       const p2pTransactions = await fetchBinanceP2PFixed(account, filterDate);
       transactions.push(...p2pTransactions);
       transactionBreakdown.p2p = p2pTransactions.length;
-      console.log(`  🤝 ${account.name} P2P: ${p2pTransactions.length}`);
+      debugLogs.push(`  🤝 ${account.name} P2P: ${p2pTransactions.length}`);
 
       // 4. FIXED Pay transactions
-      const payTransactions = await fetchBinancePayFixed(account, filterDate);
+      const payTransactions = await fetchBinancePayFixed(account, filterDate, debugLogs);
       transactions.push(...payTransactions);
       transactionBreakdown.pay = payTransactions.length;
-      console.log(`  💳 ${account.name} Pay: ${payTransactions.length}`);
+      debugLogs.push(`  💳 ${account.name} Pay: ${payTransactions.length}`);
 
     } catch (txError) {
-      console.log(`Transaction fetch failed for ${account.name}:`, txError.message);
+      debugLogs.push(`Transaction fetch failed for ${account.name}: ${txError.message}`);
     }
 
     const statusNotes = `🔧 FIXED: ${transactionBreakdown.deposits}D + ${transactionBreakdown.withdrawals}W + ${transactionBreakdown.p2p}P2P + ${transactionBreakdown.pay}Pay = ${transactions.length} total`;
@@ -614,9 +618,11 @@ async function fetchBinanceP2PFixed(account, filterDate) {
 // FIXED BINANCE PAY FUNCTION - OFFICIAL ENDPOINT
 // ===========================================
 
-async function fetchBinancePayFixed(account, filterDate) {
+async function fetchBinancePayFixed(account, filterDate, debugLogs) {
   try {
-    console.log(`    💳 Fetching Binance Pay transactions for ${account.name} using official endpoint...`);
+    const log = (msg) => debugLogs.push(msg);
+    log(`    💳 Fetching Binance Pay transactions for ${account.name} using official endpoint...`);
+    
     const timestamp = Date.now();
     const endpoint = "https://api.binance.com/sapi/v1/pay/transactions";
     const params = {
@@ -630,8 +636,8 @@ async function fetchBinancePayFixed(account, filterDate) {
     const queryString = createQueryString(params);
     const url = `${endpoint}?${queryString}&signature=${signature}`;
     
-    console.log(`        [PAY DEBUG] Request URL: ${url.split('?')[0]}`);
-    console.log(`        [PAY DEBUG] Request Params: ${JSON.stringify(params)}`);
+    log(`        [PAY DEBUG] Request URL: ${url.split('?')[0]}`);
+    log(`        [PAY DEBUG] Request Params: ${JSON.stringify(params)}`);
 
     const response = await fetch(url, {
       method: "GET",
@@ -639,34 +645,34 @@ async function fetchBinancePayFixed(account, filterDate) {
     });
 
     const responseText = await response.text();
-    console.log(`        [PAY DEBUG] Response Status: ${response.status}`);
-    console.log(`        [PAY DEBUG] Raw Response Body: ${responseText}`);
+    log(`        [PAY DEBUG] Response Status: ${response.status}`);
+    log(`        [PAY DEBUG] Raw Response Body: ${responseText}`);
 
     if (!response.ok) {
-      console.error(`        ❌ Pay API Error: ${response.status} - ${responseText}`);
+      log(`        ❌ Pay API Error: ${response.status} - ${responseText}`);
       return [];
     }
 
     const data = JSON.parse(responseText);
-    console.log(`        [PAY DEBUG] Parsed Data:`, JSON.stringify(data, null, 2));
+    log(`        [PAY DEBUG] Parsed Data: ${JSON.stringify(data, null, 2)}`);
 
     if (data.code !== "000000" || !data.success) {
-      console.error(`        ❌ Pay API Logic Error: ${data.message}`);
+      log(`        ❌ Pay API Logic Error: ${data.message}`);
       return [];
     }
     
     if (!data.data || data.data.length === 0) {
-        console.log(`        ℹ️ Pay: No new transactions found.`);
+        log(`        ℹ️ Pay: No new transactions found.`);
         return [];
     }
 
     const payTransactions = data.data.filter(tx => tx.status === "SUCCESS");
-    console.log(`        [PAY DEBUG] Found ${payTransactions.length} successful transactions.`);
+    log(`        [PAY DEBUG] Found ${payTransactions.length} successful transactions.`);
 
     return payTransactions.map(tx => {
-      console.log(`        [PAY DEBUG] Processing transaction:`, JSON.stringify(tx, null, 2));
+      log(`        [PAY DEBUG] Processing transaction: ${JSON.stringify(tx, null, 2)}`);
       const isDeposit = tx.fundsDetail.some(fund => parseFloat(fund.amount) > 0);
-      console.log(`        [PAY DEBUG] Is Deposit: ${isDeposit}`);
+      log(`        [PAY DEBUG] Is Deposit: ${isDeposit}`);
       
       return {
         platform: account.name,
@@ -684,7 +690,7 @@ async function fetchBinancePayFixed(account, filterDate) {
     });
 
   } catch (error) {
-    console.error(`    ❌ Error fetching Binance Pay for ${account.name}:`, error);
+    debugLogs.push(`    ❌ CRITICAL Error fetching Binance Pay for ${account.name}: ${error.message}`);
     return [];
   }
 }
@@ -693,7 +699,7 @@ async function fetchBinancePayFixed(account, filterDate) {
 // FIXED BYBIT WITH CORRECTED V5 AUTHENTICATION
 // ===========================================
 
-async function testByBitAccountFixed(config, filterDate) {
+async function testByBitAccountFixed(config, filterDate, debugLogs) {
   try {
     console.log(`🔧 Processing ByBit ${config.name} with FIXED V5 authentication...`);
     
@@ -1507,7 +1513,7 @@ async function saveToRecycleBin(sheets, spreadsheetId, filteredTransactions) {
 // FIXED GOOGLE SHEETS FUNCTIONS
 // ===========================================
 
-async function writeToGoogleSheetsFixed(transactions, apiStatus) {
+async function writeToGoogleSheetsFixed(transactions, apiStatus, debugLogs) {
   try {
     console.log('🔑 Setting up Google Sheets authentication...');
     
