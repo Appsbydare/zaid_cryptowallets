@@ -674,22 +674,39 @@ async function fetchBinancePayFixed(account, filterDate, debugLogs) {
       
       // FIXED: Correct logic - check if account is payer (withdrawal) or receiver (deposit)
       const accountUid = tx.uid;
-      const isPayer = tx.payerInfo?.binanceId === accountUid;
-      const isReceiver = tx.receiverInfo?.binanceId === accountUid;
+      const payerBinanceId = tx.payerInfo?.binanceId;
+      const receiverBinanceId = tx.receiverInfo?.binanceId;
+      
+      log(`        [PAY DEBUG] Account UID: ${accountUid} (type: ${typeof accountUid})`);
+      log(`        [PAY DEBUG] Payer BinanceId: ${payerBinanceId} (type: ${typeof payerBinanceId})`);
+      log(`        [PAY DEBUG] Receiver BinanceId: ${receiverBinanceId} (type: ${typeof receiverBinanceId})`);
+      
+      // Convert to strings for comparison to avoid type mismatches
+      const accountUidStr = String(accountUid);
+      const payerBinanceIdStr = String(payerBinanceId || '');
+      const receiverBinanceIdStr = String(receiverBinanceId || '');
+      
+      const isPayer = payerBinanceIdStr === accountUidStr;
+      const isReceiver = receiverBinanceIdStr === accountUidStr;
+      
+      log(`        [PAY DEBUG] Is Payer: ${isPayer} ("${payerBinanceIdStr}" === "${accountUidStr}")`);
+      log(`        [PAY DEBUG] Is Receiver: ${isReceiver} ("${receiverBinanceIdStr}" === "${accountUidStr}")`);
       
       // Determine transaction type based on account role
       let transactionType;
       if (isPayer && !isReceiver) {
         transactionType = "withdrawal"; // Account is paying out
+        log(`        [PAY DEBUG] Classified as WITHDRAWAL (account is payer)`);
       } else if (isReceiver && !isPayer) {
         transactionType = "deposit"; // Account is receiving
+        log(`        [PAY DEBUG] Classified as DEPOSIT (account is receiver)`);
       } else {
         // Fallback to amount sign if role is unclear
         transactionType = parseFloat(tx.amount) > 0 ? "deposit" : "withdrawal";
-        log(`        [PAY DEBUG] Using fallback logic - amount sign: ${tx.amount}`);
+        log(`        [PAY DEBUG] Using fallback logic - amount sign: ${tx.amount} -> ${transactionType}`);
       }
       
-      log(`        [PAY DEBUG] Account UID: ${accountUid}, Is Payer: ${isPayer}, Is Receiver: ${isReceiver}, Type: ${transactionType}`);
+      log(`        [PAY DEBUG] Final Type: ${transactionType}`);
       
       // Get counterparty name
       let counterpartyName = "Binance Pay User";
