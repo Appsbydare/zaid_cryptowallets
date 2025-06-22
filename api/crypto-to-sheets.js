@@ -540,329 +540,20 @@ async function fetchBinanceWithdrawalsFixed(account, filterDate) {
 }
 
 // ===========================================
-// FIXED BINANCE P2P FUNCTION - ONLY WORKING ENDPOINT
+// FIXED BINANCE P2P FUNCTION - OFFICIAL ENDPOINT
 // ===========================================
 
 async function fetchBinanceP2PFixed(account, filterDate) {
   const transactions = [];
-  
   try {
-    console.log(`    🤝 Fetching P2P transactions for ${account.name}...`);
-    
-    // Try the enhanced method first
-    console.log(`    🔄 Using enhanced P2P method...`);
-    try {
-      const enhancedTransactions = await fetchBinanceP2PEnhanced(account, filterDate);
-      if (enhancedTransactions.length > 0) {
-        console.log(`    ✅ Enhanced P2P method found ${enhancedTransactions.length} transactions`);
-        return enhancedTransactions;
-      }
-    } catch (enhancedError) {
-      console.log(`    ⚠️ Enhanced P2P method failed: ${enhancedError.message}`);
-    }
-    
-    // Fall back to original method if enhanced method fails
-    console.log(`    🔄 Falling back to original P2P method...`);
-    
-    // Process both BUY and SELL orders
-    for (const tradeType of ['BUY', 'SELL']) {
-      try {
-        console.log(`      🔧 Fetching P2P ${tradeType} orders...`);
-        
-        const timestamp = Date.now();
-        const endpoint = "https://api.binance.com/sapi/v1/c2c/orderMatch/listUserOrderHistory";
-        const params = {
-          tradeType: tradeType,
-          timestamp: timestamp,
-          recvWindow: 5000,
-          limit: 100
-        };
-
-        const signature = createBinanceSignature(params, account.apiSecret);
-        const queryString = createQueryString(params);
-        const url = `${endpoint}?${queryString}&signature=${signature}`;
-
-        console.log(`        🔍 Making API request to: ${endpoint}`);
-        console.log(`        📝 Request params: ${JSON.stringify(params)}`);
-
-        const response = await fetch(url, {
-          method: "GET",
-          headers: {
-            "X-MBX-APIKEY": account.apiKey,
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-          }
-        });
-
-        console.log(`        📡 Response status: ${response.status}`);
-        const responseText = await response.text();
-        console.log(`        📄 Response text: ${responseText.substring(0, 200)}...`);
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${responseText}`);
-        }
-
-        let data;
-        try {
-          data = JSON.parse(responseText);
-        } catch (parseError) {
-          throw new Error(`Failed to parse response: ${parseError.message}`);
-        }
-
-        if (data.code && data.code !== 200) {
-          throw new Error(`API error ${data.code}: ${data.msg || 'Unknown error'}`);
-        }
-
-        if (!data.data) {
-          console.log(`        ℹ️ P2P ${tradeType}: No data found`);
-          continue;
-        }
-
-        const orders = data.data;
-        console.log(`        📊 P2P ${tradeType} Orders: ${orders.length}`);
-
-        const pageTransactions = orders.filter(order => {
-          if (!order.createTime) return false;
-          
-          const orderDate = new Date(parseInt(order.createTime));
-          const isCompleted = order.orderStatus === "COMPLETED";
-          
-          return orderDate >= filterDate && isCompleted;
-        }).map(order => ({
-          platform: account.name,
-          type: tradeType === 'BUY' ? "deposit" : "withdrawal",
-          asset: order.asset,
-          amount: (order.amount || order.totalAmount || "0").toString(),
-          timestamp: new Date(parseInt(order.createTime)).toISOString(),
-          from_address: tradeType === 'BUY' ? "P2P User" : account.name,
-          to_address: tradeType === 'BUY' ? account.name : "P2P User",
-          tx_id: `P2P_${order.orderNumber}`,
-          status: "Completed",
-          network: "P2P",
-          api_source: "Binance_P2P_Fixed"
-        }));
-
-        transactions.push(...pageTransactions);
-        console.log(`        ✅ P2P ${tradeType}: Added ${pageTransactions.length} transactions`);
-
-      } catch (tradeTypeError) {
-        console.log(`      ❌ P2P ${tradeType} failed: ${tradeTypeError.message}`);
-        console.log(`      🔍 Error details:`, tradeTypeError);
-      }
-    }
-    
-  } catch (error) {
-    console.log(`    ❌ P2P fetch failed for ${account.name}: ${error.message}`);
-    console.log(`    🔍 Error details:`, error);
-  }
-  
-  return transactions;
-}
-
-// Enhanced P2P fetching function
-async function fetchBinanceP2PEnhanced(account, filterDate) {
-  try {
-    console.log(`    🤝 Fetching P2P transactions for ${account.name} using enhanced method...`);
-    
-    const baseDomain = 'https://p2p.binance.com/bapi/';
-    const transactions = [];
-    
-    // Step 1: Load available markets and currencies
-    console.log('      🔄 Loading P2P markets...');
-    const currencyUrl = baseDomain + 'fiat/v1/public/fiatpayment/menu/currency';
-    console.log(`        🔍 Making request to: ${currencyUrl}`);
-    
-    const currencyResp = await fetch(currencyUrl);
-    console.log(`        📡 Currency response status: ${currencyResp.status}`);
-    
-    if (!currencyResp.ok) {
-      const errorText = await currencyResp.text();
-      throw new Error(`Failed to load currencies: ${currencyResp.status} - ${errorText}`);
-    }
-    
-    const currencyText = await currencyResp.text();
-    console.log(`        📄 Currency response text: ${currencyText.substring(0, 200)}...`);
-    
-    let currencyData;
-    try {
-      currencyData = JSON.parse(currencyText);
-    } catch (parseError) {
-      throw new Error(`Failed to parse currency response: ${parseError.message}`);
-    }
-    
-    if (!currencyData.data?.currencyList) {
-      throw new Error('Invalid currency data response: ' + JSON.stringify(currencyData));
-    }
-    
-    const fiatList = currencyData.data.currencyList.map(c => c.name);
-    console.log(`      ✅ Found ${fiatList.length} fiat currencies: ${fiatList.join(', ')}`);
-    
-    // Step 2: Get supported assets for each fiat
-    const fiatAssets = {};
-    for (const fiat of fiatList) {
-      try {
-        const configUrl = baseDomain + 'c2c/v2/friendly/c2c/portal/config';
-        console.log(`        🔍 Fetching config for ${fiat} from: ${configUrl}`);
-        
-        const configResp = await fetch(configUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': '*/*',
-            'User-Agent': 'Mozilla/5.0'
-          },
-          body: JSON.stringify({ fiat: fiat })
-        });
-        
-        console.log(`        📡 Config response status for ${fiat}: ${configResp.status}`);
-        
-        if (!configResp.ok) {
-          const errorText = await configResp.text();
-          console.log(`        ⚠️ Could not load config for ${fiat}: ${configResp.status} - ${errorText}`);
-          continue;
-        }
-        
-        const configText = await configResp.text();
-        console.log(`        📄 Config response text for ${fiat}: ${configText.substring(0, 200)}...`);
-        
-        let configData;
-        try {
-          configData = JSON.parse(configText);
-        } catch (parseError) {
-          console.log(`        ⚠️ Failed to parse config for ${fiat}: ${parseError.message}`);
-          continue;
-        }
-        
-        if (configData.data?.areas) {
-          const p2pArea = configData.data.areas.find(area => area.area === 'P2P');
-          if (p2pArea?.tradeSides?.[0]?.assets) {
-            fiatAssets[fiat] = p2pArea.tradeSides[0].assets.map(a => a.asset);
-            console.log(`        ✅ Found ${fiatAssets[fiat].length} assets for ${fiat}: ${fiatAssets[fiat].join(', ')}`);
-          }
-        }
-      } catch (error) {
-        console.log(`        ⚠️ Could not load assets for ${fiat}: ${error.message}`);
-      }
-    }
-    
-    // Step 3: Fetch offers for each asset/fiat pair
-    const targetAssets = ['USDT', 'BTC', 'BNB']; // Focus on main assets
-    const targetFiats = ['USD', 'EUR', 'AED']; // Focus on main fiats
-    
-    for (const asset of targetAssets) {
-      for (const fiat of targetFiats) {
-        if (!fiatAssets[fiat]?.includes(asset)) {
-          console.log(`        ℹ️ ${asset}/${fiat} not supported`);
-          continue;
-        }
-        
-        console.log(`      🔍 Fetching ${asset}/${fiat} P2P offers...`);
-        
-        // Fetch both BUY and SELL offers
-        for (const tradeType of ['BUY', 'SELL']) {
-          try {
-            const searchUrl = baseDomain + 'c2c/v2/friendly/c2c/adv/search';
-            const searchData = {
-              page: 1,
-              rows: 50,
-              payTypes: [],
-              countries: [],
-              asset: asset,
-              fiat: fiat,
-              tradeType: tradeType,
-              publisherType: null
-            };
-            
-            console.log(`        🔍 Making request to: ${searchUrl}`);
-            console.log(`        📝 Request data: ${JSON.stringify(searchData)}`);
-            
-            const response = await fetch(searchUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': '*/*',
-                'User-Agent': 'Mozilla/5.0'
-              },
-              body: JSON.stringify(searchData)
-            });
-            
-            console.log(`        📡 Response status: ${response.status}`);
-            
-            if (!response.ok) {
-              const errorText = await response.text();
-              throw new Error(`P2P API error: ${response.status} - ${errorText}`);
-            }
-            
-            const responseText = await response.text();
-            console.log(`        📄 Response text: ${responseText.substring(0, 200)}...`);
-            
-            let data;
-            try {
-              data = JSON.parse(responseText);
-            } catch (parseError) {
-              throw new Error(`Failed to parse response: ${parseError.message}`);
-            }
-            
-            if (data.data && Array.isArray(data.data)) {
-              const offers = data.data.map(offer => {
-                const adv = offer.adv;
-                return {
-                  platform: account.name,
-                  type: tradeType === 'BUY' ? "deposit" : "withdrawal",
-                  asset: asset,
-                  amount: adv.price.toString(),
-                  timestamp: new Date().toISOString(),
-                  from_address: tradeType === 'BUY' ? "P2P User" : account.name,
-                  to_address: tradeType === 'BUY' ? account.name : "P2P User",
-                  tx_id: `P2P_ENHANCED_${adv.advNo}`,
-                  status: "Active",
-                  network: "P2P",
-                  api_source: "Binance_P2P_Enhanced",
-                  additional_info: {
-                    min_amount: adv.minSingleTransQuantity,
-                    max_amount: adv.maxSingleTransQuantity,
-                    commission_rate: adv.commissionRate,
-                    fiat: fiat
-                  }
-                };
-              });
-              
-              transactions.push(...offers);
-              console.log(`        ✅ Found ${offers.length} ${tradeType} offers for ${asset}/${fiat}`);
-            }
-            
-          } catch (error) {
-            console.log(`        ❌ Error fetching ${tradeType} offers for ${asset}/${fiat}: ${error.message}`);
-            console.log(`        🔍 Error details:`, error);
-          }
-        }
-      }
-    }
-    
-    console.log(`    📊 Total P2P offers found: ${transactions.length}`);
-    return transactions;
-    
-  } catch (error) {
-    console.log(`    ❌ Enhanced P2P fetch failed: ${error.message}`);
-    console.log(`    🔍 Error details:`, error);
-    return [];
-  }
-}
-
-// ===========================================
-// FIXED BINANCE PAY FUNCTION - SIMPLIFIED
-// ===========================================
-
-async function fetchBinancePayFixed(account, filterDate) {
-  try {
-    console.log(`    💳 Fetching Binance Pay transactions for ${account.name}...`);
-    
-    // FIXED: Use only the main Pay endpoint
+    console.log(`    🤝 Fetching P2P transactions for ${account.name} using official endpoint...`);
     const timestamp = Date.now();
-    const endpoint = "https://api.binance.com/sapi/v1/pay/transactions";
+    const endpoint = "https://api.binance.com/sapi/v1/c2c/orderMatch/listUserOrderHistory";
     const params = {
       timestamp: timestamp,
       recvWindow: 5000,
-      limit: 50, // FIXED: Reduced limit
+      page: 1,
+      rows: 100, // Fetch up to 100 records
       startTime: filterDate.getTime()
     };
 
@@ -870,62 +561,117 @@ async function fetchBinancePayFixed(account, filterDate) {
     const queryString = createQueryString(params);
     const url = `${endpoint}?${queryString}&signature=${signature}`;
 
+    console.log(`        🔍 P2P Request URL: ${url.split('?')[0]}`);
     const response = await fetch(url, {
       method: "GET",
-      headers: {
-        "X-MBX-APIKEY": account.apiKey,
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-      }
+      headers: { "X-MBX-APIKEY": account.apiKey, "User-Agent": "Mozilla/5.0" }
+    });
+    
+    const responseText = await response.text();
+    if (!response.ok) {
+      console.error(`        ❌ P2P API Error: ${response.status} - ${responseText}`);
+      return [];
+    }
+    
+    const data = JSON.parse(responseText);
+    if (data.code !== "000000" || !data.success) {
+      console.error(`        ❌ P2P API Logic Error: ${data.message}`);
+      return [];
+    }
+
+    if (!data.data || data.data.length === 0) {
+      console.log(`        ℹ️ P2P: No new transactions found.`);
+      return [];
+    }
+
+    const orders = data.data.filter(order => order.orderStatus === "COMPLETED");
+    console.log(`        📊 P2P Completed Orders: ${orders.length}`);
+
+    return orders.map(order => ({
+      platform: account.name,
+      type: order.tradeType === 'BUY' ? "deposit" : "withdrawal",
+      asset: order.asset,
+      amount: order.amount.toString(),
+      timestamp: new Date(order.createTime).toISOString(),
+      from_address: order.tradeType === 'BUY' ? "P2P User" : account.name,
+      to_address: order.tradeType === 'BUY' ? account.name : "P2P User",
+      tx_id: `P2P_${order.orderNumber}`,
+      status: "Completed",
+      network: "P2P",
+      api_source: "Binance_P2P_Official"
+    }));
+
+  } catch (error) {
+    console.error(`    ❌ P2P fetch failed for ${account.name}:`, error);
+  }
+  return transactions;
+}
+
+// ===========================================
+// FIXED BINANCE PAY FUNCTION - OFFICIAL ENDPOINT
+// ===========================================
+
+async function fetchBinancePayFixed(account, filterDate) {
+  try {
+    console.log(`    💳 Fetching Binance Pay transactions for ${account.name} using official endpoint...`);
+    const timestamp = Date.now();
+    const endpoint = "https://api.binance.com/sapi/v1/pay/transactions";
+    const params = {
+      timestamp: timestamp,
+      recvWindow: 5000,
+      limit: 100,
+      startTime: filterDate.getTime()
+    };
+
+    const signature = createBinanceSignature(params, account.apiSecret);
+    const queryString = createQueryString(params);
+    const url = `${endpoint}?${queryString}&signature=${signature}`;
+    
+    console.log(`        🔍 Pay Request URL: ${url.split('?')[0]}`);
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { "X-MBX-APIKEY": account.apiKey, "User-Agent": "Mozilla/5.0" }
     });
 
+    const responseText = await response.text();
     if (!response.ok) {
-      console.log(`        ❌ Pay Error: ${response.status}`);
+      console.error(`        ❌ Pay API Error: ${response.status} - ${responseText}`);
       return [];
     }
 
     const data = await response.json();
-
-    if (data.code && data.code !== 200) {
-      console.log(`        ❌ Pay API Error: ${data.msg}`);
+    if (data.code !== "000000" || !data.success) {
+      console.error(`        ❌ Pay API Logic Error: ${data.message}`);
       return [];
     }
-
-    if (!data.data) {
-      console.log(`        ℹ️ Pay No data found`);
-      return [];
+    
+    if (!data.data || data.data.length === 0) {
+        console.log(`        ℹ️ Pay: No new transactions found.`);
+        return [];
     }
 
-    const transactions = data.data;
-    console.log(`        📊 Pay transactions: ${transactions.length}`);
+    const payTransactions = data.data.filter(tx => tx.status === "SUCCESS");
+    console.log(`        📊 Pay Successful Transactions: ${payTransactions.length}`);
 
-    const payTransactions = transactions.filter(tx => {
-      const txDate = new Date(parseInt(tx.createTime || tx.insertTime));
-      const isSuccess = tx.status === "SUCCESS" || tx.status === 1;
-      
-      return txDate >= filterDate && isSuccess;
-    }).map(tx => {
-      const isDeposit = tx.direction === "IN" || tx.type === "deposit";
-      
+    return payTransactions.map(tx => {
+      const isDeposit = tx.orderType === "C2C_BUY_ORDER";
       return {
         platform: account.name,
         type: isDeposit ? "deposit" : "withdrawal",
-        asset: tx.currency || tx.coin,
-        amount: (tx.amount || "0").toString(),
-        timestamp: new Date(parseInt(tx.createTime || tx.insertTime)).toISOString(),
+        asset: tx.currency,
+        amount: tx.amount.toString(),
+        timestamp: new Date(tx.transactionTime).toISOString(),
         from_address: isDeposit ? "Binance Pay User" : account.name,
         to_address: isDeposit ? account.name : "Binance Pay User",
-        tx_id: `PAY_${tx.transactionId || tx.id}`,
+        tx_id: `PAY_${tx.transactionId}`,
         status: "Completed",
         network: "Binance Pay",
-        api_source: "Binance_Pay_Fixed"
+        api_source: "Binance_Pay_Official"
       };
     });
 
-    console.log(`        ✅ Pay transactions: ${payTransactions.length}`);
-    return payTransactions;
-
   } catch (error) {
-    console.error(`Error fetching Binance Pay for ${account.name}:`, error);
+    console.error(`    ❌ Error fetching Binance Pay for ${account.name}:`, error);
     return [];
   }
 }
