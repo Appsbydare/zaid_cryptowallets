@@ -671,8 +671,8 @@ async function fetchBinancePayFixed(account, filterDate, debugLogs) {
 
     return payTransactions.map(tx => {
       log(`        [PAY DEBUG] Processing transaction: ${JSON.stringify(tx, null, 2)}`);
-      const isDeposit = tx.fundsDetail.some(fund => parseFloat(fund.amount) > 0);
-      log(`        [PAY DEBUG] Is Deposit: ${isDeposit}`);
+      const isDeposit = parseFloat(tx.amount) > 0;
+      log(`        [PAY DEBUG] Is Deposit: ${isDeposit} (amount: ${tx.amount})`);
       
       return {
         platform: account.name,
@@ -680,8 +680,8 @@ async function fetchBinancePayFixed(account, filterDate, debugLogs) {
         asset: tx.currency,
         amount: Math.abs(parseFloat(tx.amount)).toString(),
         timestamp: new Date(tx.transactionTime).toISOString(),
-        from_address: isDeposit ? (tx.counterpartUsername || "Binance Pay User") : account.name,
-        to_address: isDeposit ? account.name : (tx.counterpartUsername || "Binance Pay User"),
+        from_address: isDeposit ? (tx.payerInfo?.name || tx.receiverInfo?.name || "Binance Pay User") : account.name,
+        to_address: isDeposit ? account.name : (tx.payerInfo?.name || tx.receiverInfo?.name || "Binance Pay User"),
         tx_id: `PAY_${tx.transactionId}`,
         status: "Completed",
         network: "Binance Pay",
