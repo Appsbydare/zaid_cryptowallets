@@ -1162,7 +1162,7 @@ async function fetchEthereumEnhanced(address, filterDate) {
 
 async function fetchTronEnhanced(address, filterDate) {
   try {
-    const endpoint = `https://api.trongrid.io/v1/accounts/${address}/transactions?limit=50&order_by=block_timestamp,desc`;
+    const endpoint = `https://api.trongrid.io/v1/accounts/${address}/transactions?limit=200&order_by=block_timestamp,desc`;
     const response = await fetch(endpoint);
     if (!response.ok) {
       throw new Error(`TRON API error: ${response.status}`);
