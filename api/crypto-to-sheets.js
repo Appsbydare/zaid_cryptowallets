@@ -1173,7 +1173,7 @@ async function fetchTronEnhanced(address, filterDate) {
 
     // TRC-20 token contract addresses (add more as needed)
     const trc20Tokens = {
-      USDT: 'TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj',
+      USDT: 'TR7NHqjeKQxGTCi8qzYrqTRK8SkC7hCBeM',
       // USDC: 'TOKEN_CONTRACT_ADDRESS',
     };
 
