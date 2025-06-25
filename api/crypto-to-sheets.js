@@ -1186,7 +1186,7 @@ async function fetchTronEnhanced(address, filterDate) {
           tx.raw_data.contract.forEach(contract => {
             if (contract.type === "TransferContract") {
               const value = contract.parameter.value;
-              const isDeposit = value.to_address === address;
+              const isDeposit = value.to_address && value.to_address.toLowerCase() === address.toLowerCase();
               const amount = (value.amount / 1000000).toString();
               transactions.push({
                 platform: "TRON Wallet",
@@ -1223,7 +1223,7 @@ async function fetchTronEnhanced(address, filterDate) {
           k => trc20Tokens[k].toLowerCase() === tx.token_info.address.toLowerCase()
         );
         if (!tokenName) return;
-        const isDeposit = tx.to_address === address;
+        const isDeposit = tx.to_address && tx.to_address.toLowerCase() === address.toLowerCase();
         // USDT and most TRC-20 tokens have 6 decimals
         const decimals = tx.token_info.decimals || 6;
         const amount = (parseFloat(tx.value) / Math.pow(10, decimals)).toString();
