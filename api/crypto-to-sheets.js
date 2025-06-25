@@ -24,9 +24,19 @@ export default async function handler(req, res) {
     debugLogs.push('🚀 Starting FIXED crypto data fetch...');
 
     // Get date filtering from request or use defaults
-    const startDate = req.body?.startDate || '2025-05-31T00:00:00.000Z';
+    let startDate = req.body?.startDate;
+    
+    // If no startDate provided, default to 7 days ago
+    if (!startDate) {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      startDate = sevenDaysAgo.toISOString();
+      debugLogs.push('📅 No startDate provided, using last 7 days');
+    }
+    
     const filterDate = new Date(startDate);
     debugLogs.push(`📅 Filtering transactions after: ${startDate}`);
+    debugLogs.push(`📅 Filter date object: ${filterDate.toISOString()}`);
 
     const allTransactions = [];
     const apiStatusResults = {};
@@ -1371,7 +1381,7 @@ function filterTransactionsByValueFixed(transactions) {
     'ETC': 92.40 // FIXED: Added
   };
 
-  const minValueAED = 3.6;
+  const minValueAED = 1.0;
   let filteredCount = 0;
   let totalCount = transactions.length;
   const filteredTransactions = [];
@@ -1404,7 +1414,7 @@ function filterTransactionsByValueFixed(transactions) {
     return keepTransaction;
   });
 
-  console.log(`💰 Value Filter: ${totalCount} → ${keepTransactions.length} transactions (removed ${filteredCount} < 3.6 AED)`);
+  console.log(`💰 Value Filter: ${totalCount} → ${keepTransactions.length} transactions (removed ${filteredCount} < 1 AED)`);
   if (unknownCurrencies.size > 0) {
     console.log(`⚠️ Unknown currencies using 1 AED default: ${Array.from(unknownCurrencies).join(', ')}`);
   }
