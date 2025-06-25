@@ -1223,20 +1223,28 @@ async function fetchTronEnhanced(address, filterDate) {
           k => trc20Tokens[k].toLowerCase() === tx.token_info.address.toLowerCase()
         );
         if (!tokenName) return;
-        const isDeposit = tx.to_address && tx.to_address.toLowerCase() === address.toLowerCase();
+        let type = null;
+        if (tx.to && tx.to.toLowerCase() === address.toLowerCase()) {
+          type = 'deposit';
+        } else if (tx.from && tx.from.toLowerCase() === address.toLowerCase()) {
+          type = 'withdrawal';
+        } else {
+          // Not relevant to this wallet, skip
+          return;
+        }
         // USDT and most TRC-20 tokens have 6 decimals
         const decimals = tx.token_info.decimals || 6;
         const amount = (parseFloat(tx.value) / Math.pow(10, decimals)).toString();
         // Log the raw and calculated values for diagnostics
-        console.log(`[TRC20 LOG] TX: ${tx.transaction_id}, Symbol: ${tx.token_info.symbol}, Decimals: ${decimals}, Raw Value: ${tx.value}, Amount: ${amount}, Type: ${isDeposit ? 'deposit' : 'withdrawal'}`);
+        console.log(`[TRC20 LOG] TX: ${tx.transaction_id}, Symbol: ${tx.token_info.symbol}, Decimals: ${decimals}, Raw Value: ${tx.value}, Amount: ${amount}, Type: ${type}`);
         transactions.push({
           platform: "TRON Wallet",
-          type: isDeposit ? "deposit" : "withdrawal",
+          type: type,
           asset: tokenName,
           amount: amount,
           timestamp: txDate.toISOString(),
-          from_address: tx.from_address,
-          to_address: tx.to_address,
+          from_address: tx.from,
+          to_address: tx.to,
           tx_id: tx.transaction_id,
           status: "Completed",
           network: "TRON",
