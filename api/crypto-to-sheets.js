@@ -1173,7 +1173,7 @@ async function fetchTronEnhanced(address, filterDate) {
 
     // TRC-20 token contract addresses (add more as needed)
     const trc20Tokens = {
-      USDT: 'TR7NHqjeKQxGTCi8qzYrqTRK8SkC7hCBeM',
+      USDT: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
       // USDC: 'TOKEN_CONTRACT_ADDRESS',
     };
 
@@ -1225,7 +1225,10 @@ async function fetchTronEnhanced(address, filterDate) {
         if (!tokenName) return;
         const isDeposit = tx.to_address === address;
         // USDT and most TRC-20 tokens have 6 decimals
-        const amount = (parseFloat(tx.value) / Math.pow(10, tx.token_info.decimals || 6)).toString();
+        const decimals = tx.token_info.decimals || 6;
+        const amount = (parseFloat(tx.value) / Math.pow(10, decimals)).toString();
+        // Log the raw and calculated values for diagnostics
+        console.log(`[TRC20 LOG] TX: ${tx.transaction_id}, Symbol: ${tx.token_info.symbol}, Decimals: ${decimals}, Raw Value: ${tx.value}, Amount: ${amount}, Type: ${isDeposit ? 'deposit' : 'withdrawal'}`);
         transactions.push({
           platform: "TRON Wallet",
           type: isDeposit ? "deposit" : "withdrawal",
@@ -1241,6 +1244,12 @@ async function fetchTronEnhanced(address, filterDate) {
         });
       });
     }
+
+    // Log all transactions before returning
+    console.log(`[TRON LOG] Total transactions to return: ${transactions.length}`);
+    transactions.forEach((t, i) => {
+      console.log(`[TRON TX ${i + 1}] ${JSON.stringify(t)}`);
+    });
 
     return transactions;
   } catch (error) {
@@ -1443,12 +1452,14 @@ function filterTransactionsByValueFixed(transactions) {
         used_default_rate: !pricesAED[tx.asset],
         filter_reason: `Value ${aedValue.toFixed(2)} AED < ${minValueAED} AED minimum`
       });
+      // Log filtered out transaction details
+      console.log(`[FILTERED OUT] TX: ${tx.tx_id}, Asset: ${tx.asset}, Amount: ${amount}, AED: ${aedValue}, Reason: Value < ${minValueAED} AED`);
     }
     
     return keepTransaction;
   });
 
-  console.log(`💰 Value Filter: ${totalCount} → ${keepTransactions.length} transactions (removed ${filteredCount} < 1 AED)`);
+  console.log(`💰 Value Filter: ${totalCount} → ${keepTransactions.length} transactions (removed ${filteredCount} < ${minValueAED} AED)`);
   if (unknownCurrencies.size > 0) {
     console.log(`⚠️ Unknown currencies using 1 AED default: ${Array.from(unknownCurrencies).join(', ')}`);
   }
