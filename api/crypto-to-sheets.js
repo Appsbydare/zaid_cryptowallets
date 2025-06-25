@@ -1162,93 +1162,86 @@ async function fetchEthereumEnhanced(address, filterDate) {
 
 async function fetchTronEnhanced(address, filterDate) {
   try {
-    const endpoint = `https://api.trongrid.io/v1/accounts/${address}/transactions?limit=200&order_by=block_timestamp,desc`;
-    const response = await fetch(endpoint);
-    if (!response.ok) {
-      throw new Error(`TRON API error: ${response.status}`);
+    // Fetch native TRX transfers (as before)
+    const trxEndpoint = `https://api.trongrid.io/v1/accounts/${address}/transactions?limit=200&order_by=block_timestamp,desc`;
+    const trxResponse = await fetch(trxEndpoint);
+    if (!trxResponse.ok) {
+      throw new Error(`TRON API error: ${trxResponse.status}`);
     }
-    const data = await response.json();
-    if (!data.data) {
-      return [];
-    }
+    const trxData = await trxResponse.json();
     const transactions = [];
 
     // TRC-20 token contract addresses (add more as needed)
     const trc20Tokens = {
       USDT: 'TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj',
-      // Add more tokens here if needed, e.g. USDC: 'TOKEN_CONTRACT_ADDRESS'
+      // USDC: 'TOKEN_CONTRACT_ADDRESS',
     };
 
-    data.data.forEach(tx => {
-      const txDate = new Date(tx.block_timestamp);
-      if (txDate < filterDate) return;
-      if (tx.raw_data && tx.raw_data.contract) {
-        tx.raw_data.contract.forEach(contract => {
-          // Native TRX transfer
-          if (contract.type === "TransferContract") {
-            const value = contract.parameter.value;
-            const isDeposit = value.to_address === address;
-            const amount = (value.amount / 1000000).toString();
-            transactions.push({
-              platform: "TRON Wallet",
-              type: isDeposit ? "deposit" : "withdrawal",
-              asset: "TRX",
-              amount: amount,
-              timestamp: txDate.toISOString(),
-              from_address: value.owner_address,
-              to_address: value.to_address,
-              tx_id: tx.txID,
-              status: "Completed",
-              network: "TRON",
-              api_source: "TronGrid"
-            });
-          }
-          // TRC-20 token transfer (e.g. USDT)
-          if (contract.type === "TriggerSmartContract") {
-            const contractAddress = contract.parameter.value.contract_address;
-            // Check if this is a known TRC-20 token
-            const tokenName = Object.keys(trc20Tokens).find(
-              k => trc20Tokens[k].toLowerCase() === contractAddress.toLowerCase()
-            );
-            if (tokenName) {
-              // Decode transfer(address,address,uint256) from hex data
-              const dataHex = contract.parameter.value.data;
-              if (dataHex && dataHex.startsWith('a9059cbb')) { // transfer method
-                // data: a9059cbb + 32 bytes to + 32 bytes amount
-                const toHex = dataHex.substring(8, 72);
-                const amountHex = dataHex.substring(72, 136);
-                // Helper to decode hex address
-                function hexToTronAddress(hex) {
-                  // Tron addresses are last 20 bytes, base58check encoded
-                  // But in logs, we can use hex for matching
-                  return '41' + toHex.slice(-40);
-                }
-                // Helper to decode hex to decimal
-                function hexToDecimal(hex) {
-                  return parseInt(hex, 16);
-                }
-                const toAddressHex = '41' + toHex.slice(-40);
-                const amount = (parseInt(amountHex, 16) / 1000000).toString();
-                const isDeposit = toAddressHex.toLowerCase() === address.toLowerCase();
-                transactions.push({
-                  platform: "TRON Wallet",
-                  type: isDeposit ? "deposit" : "withdrawal",
-                  asset: tokenName,
-                  amount: amount,
-                  timestamp: txDate.toISOString(),
-                  from_address: contract.parameter.value.owner_address,
-                  to_address: toAddressHex,
-                  tx_id: tx.txID,
-                  status: "Completed",
-                  network: "TRON",
-                  api_source: "TronGrid"
-                });
-              }
+    // Process TRX transfers
+    if (trxData.data) {
+      trxData.data.forEach(tx => {
+        const txDate = new Date(tx.block_timestamp);
+        if (txDate < filterDate) return;
+        if (tx.raw_data && tx.raw_data.contract) {
+          tx.raw_data.contract.forEach(contract => {
+            if (contract.type === "TransferContract") {
+              const value = contract.parameter.value;
+              const isDeposit = value.to_address === address;
+              const amount = (value.amount / 1000000).toString();
+              transactions.push({
+                platform: "TRON Wallet",
+                type: isDeposit ? "deposit" : "withdrawal",
+                asset: "TRX",
+                amount: amount,
+                timestamp: txDate.toISOString(),
+                from_address: value.owner_address,
+                to_address: value.to_address,
+                tx_id: tx.txID,
+                status: "Completed",
+                network: "TRON",
+                api_source: "TronGrid"
+              });
             }
-          }
+          });
+        }
+      });
+    }
+
+    // Fetch TRC-20 token transfers (USDT, etc.)
+    const trc20Endpoint = `https://api.trongrid.io/v1/accounts/${address}/transactions/trc20?limit=200&order_by=block_timestamp,desc`;
+    const trc20Response = await fetch(trc20Endpoint);
+    if (!trc20Response.ok) {
+      throw new Error(`TRON TRC-20 API error: ${trc20Response.status}`);
+    }
+    const trc20Data = await trc20Response.json();
+    if (trc20Data.data) {
+      trc20Data.data.forEach(tx => {
+        const txDate = new Date(tx.block_timestamp);
+        if (txDate < filterDate) return;
+        // Only include tokens we care about
+        const tokenName = Object.keys(trc20Tokens).find(
+          k => trc20Tokens[k].toLowerCase() === tx.token_info.address.toLowerCase()
+        );
+        if (!tokenName) return;
+        const isDeposit = tx.to_address === address;
+        // USDT and most TRC-20 tokens have 6 decimals
+        const amount = (parseFloat(tx.value) / Math.pow(10, tx.token_info.decimals || 6)).toString();
+        transactions.push({
+          platform: "TRON Wallet",
+          type: isDeposit ? "deposit" : "withdrawal",
+          asset: tokenName,
+          amount: amount,
+          timestamp: txDate.toISOString(),
+          from_address: tx.from_address,
+          to_address: tx.to_address,
+          tx_id: tx.transaction_id,
+          status: "Completed",
+          network: "TRON",
+          api_source: "TronGrid-TRC20"
         });
-      }
-    });
+      });
+    }
+
     return transactions;
   } catch (error) {
     console.error("TRON API error:", error);
