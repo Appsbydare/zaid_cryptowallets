@@ -1163,32 +1163,32 @@ async function fetchEthereumEnhanced(address, filterDate) {
 async function fetchTronEnhanced(address, filterDate) {
   try {
     const endpoint = `https://api.trongrid.io/v1/accounts/${address}/transactions?limit=50&order_by=block_timestamp,desc`;
-    
     const response = await fetch(endpoint);
-    
     if (!response.ok) {
       throw new Error(`TRON API error: ${response.status}`);
     }
-    
     const data = await response.json();
-    
     if (!data.data) {
       return [];
     }
-    
     const transactions = [];
-    
+
+    // TRC-20 token contract addresses (add more as needed)
+    const trc20Tokens = {
+      USDT: 'TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj',
+      // Add more tokens here if needed, e.g. USDC: 'TOKEN_CONTRACT_ADDRESS'
+    };
+
     data.data.forEach(tx => {
       const txDate = new Date(tx.block_timestamp);
       if (txDate < filterDate) return;
-      
       if (tx.raw_data && tx.raw_data.contract) {
         tx.raw_data.contract.forEach(contract => {
+          // Native TRX transfer
           if (contract.type === "TransferContract") {
             const value = contract.parameter.value;
             const isDeposit = value.to_address === address;
             const amount = (value.amount / 1000000).toString();
-            
             transactions.push({
               platform: "TRON Wallet",
               type: isDeposit ? "deposit" : "withdrawal",
@@ -1203,12 +1203,53 @@ async function fetchTronEnhanced(address, filterDate) {
               api_source: "TronGrid"
             });
           }
+          // TRC-20 token transfer (e.g. USDT)
+          if (contract.type === "TriggerSmartContract") {
+            const contractAddress = contract.parameter.value.contract_address;
+            // Check if this is a known TRC-20 token
+            const tokenName = Object.keys(trc20Tokens).find(
+              k => trc20Tokens[k].toLowerCase() === contractAddress.toLowerCase()
+            );
+            if (tokenName) {
+              // Decode transfer(address,address,uint256) from hex data
+              const dataHex = contract.parameter.value.data;
+              if (dataHex && dataHex.startsWith('a9059cbb')) { // transfer method
+                // data: a9059cbb + 32 bytes to + 32 bytes amount
+                const toHex = dataHex.substring(8, 72);
+                const amountHex = dataHex.substring(72, 136);
+                // Helper to decode hex address
+                function hexToTronAddress(hex) {
+                  // Tron addresses are last 20 bytes, base58check encoded
+                  // But in logs, we can use hex for matching
+                  return '41' + toHex.slice(-40);
+                }
+                // Helper to decode hex to decimal
+                function hexToDecimal(hex) {
+                  return parseInt(hex, 16);
+                }
+                const toAddressHex = '41' + toHex.slice(-40);
+                const amount = (parseInt(amountHex, 16) / 1000000).toString();
+                const isDeposit = toAddressHex.toLowerCase() === address.toLowerCase();
+                transactions.push({
+                  platform: "TRON Wallet",
+                  type: isDeposit ? "deposit" : "withdrawal",
+                  asset: tokenName,
+                  amount: amount,
+                  timestamp: txDate.toISOString(),
+                  from_address: contract.parameter.value.owner_address,
+                  to_address: toAddressHex,
+                  tx_id: tx.txID,
+                  status: "Completed",
+                  network: "TRON",
+                  api_source: "TronGrid"
+                });
+              }
+            }
+          }
         });
       }
     });
-    
     return transactions;
-    
   } catch (error) {
     console.error("TRON API error:", error);
     throw error;
